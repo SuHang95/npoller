@@ -24,14 +24,13 @@ public:
     template<typename _Tp, typename... _Args>
     std::shared_ptr<_Tp> create_io(_Args &&...);
 
+    template<typename... _Args>
+    std::future<std::shared_ptr<tcp>> create_tcp_async(const char *addr, unsigned short int port,_Args &&... args);
 
 private:
 
     template<typename _Tp, typename... _Args>
     std::shared_ptr<_Tp> create_io_in_eventloop(_Args &&... args);
-
-    template<typename... _Args>
-    std::shared_ptr<tcp> create_tcp_in_eventloop(const char *addr, unsigned short int port,_Args &&... args);
 
     event_processor *ev_processor;
 };
@@ -48,20 +47,7 @@ std::shared_ptr<_Tp> io_factory::create_io_in_eventloop(_Args &&... __args) {
     return std::shared_ptr<_Tp>();
 }
 
-template<typename... _Args>
-std::shared_ptr<tcp> io_factory::create_tcp_in_eventloop(const char *addr,
-        unsigned short int port,_Args &&... __args) {
-    std::shared_ptr<tcp> tcp_instance = std::make_shared<tcp>
-            (io::this_is_private(0),std::forward<_Args>(__args)...);
-    if (ev_processor->add_io(std::dynamic_pointer_cast<io>(tcp_instance))) {
-        tcp_instance->set_valid(false);
-        return std::shared_ptr<tcp>();
-    }
 
-
-
-
-}
 
 template<typename _Tp, typename... _Args>
 std::future<std::shared_ptr<_Tp>>
@@ -94,5 +80,16 @@ std::shared_ptr<_Tp> io_factory::create_io(_Args &&... __args) {
     }
 }
 
+template<typename... _Args>
+std::future<std::shared_ptr<tcp>>
+io_factory::create_tcp_async(const char *addr, unsigned short int port,_Args &&... args){
+
+    std::promise<std::shared_ptr<tcp>()> prom = std::make_shared<tcp>
+            (io::this_is_private(0),std::forward<_Args>(__args)...);
+    if (ev_processor->add_io(std::dynamic_pointer_cast<io>(tcp_instance))) 
+        tcp_instance->set_valid(false);
+    std::future<std::shared_ptr<tcp>> future = prom->get_future;
+    return future;
+}
 
 #endif //NETPROCESSOR_IO_FACTORY_H
