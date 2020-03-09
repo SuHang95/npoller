@@ -10,6 +10,7 @@
 #include "io.h"
 #include "tcp.h"
 #include "event_processor.h"
+#include "exception"
 
 
 class io_factory {
@@ -33,6 +34,7 @@ private:
     std::shared_ptr<_Tp> create_io_in_eventloop(_Args &&... args);
 
     event_processor *ev_processor;
+    std::promise<std::shared_ptr<tcp>> tcp_indication;
 };
 
 
@@ -83,11 +85,16 @@ std::shared_ptr<_Tp> io_factory::create_io(_Args &&... __args) {
 template<typename... _Args>
 std::future<std::shared_ptr<tcp>>
 io_factory::create_tcp_async(const char *addr, unsigned short int port,_Args &&... args){
-
-    std::promise<std::shared_ptr<tcp>()> prom = std::make_shared<tcp>
-            (io::this_is_private(0),std::forward<_Args>(__args)...);
-    if (ev_processor->add_io(std::dynamic_pointer_cast<io>(tcp_instance))) 
-        tcp_instance->set_valid(false);
+    std::promise<std::shared_ptr<tcp>> tcp_instance( std::make_shared<tcp>
+            (io::this_is_private(0),std::forward<_Args>(__args)...));
+    std::function<void()> task([=]) mutable {
+        tcp_instance->connect();
+        if (tcp_instance->tcp_status == 2)
+            tcp_indication.set_value(std::move(tcp_instance));
+        else
+            tcp_indication.set_exception(std::current_exception());
+    } 
+    ev_processor->add_task(task)
     std::future<std::shared_ptr<tcp>> future = prom->get_future;
     return future;
 }
