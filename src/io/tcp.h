@@ -86,6 +86,10 @@ protected:
 
     inline void set_status(tcp_status _status);
 
+    friend class event_processor;
+
+    friend class io_factory;
+
 };
 
 inline sockaddr_in tcp::make_sockaddr_in(const char *__addr, int __port) {
@@ -147,7 +151,7 @@ inline void tcp::set_status(tcp::tcp_status _status) {
     __status.store(_status, std::memory_order_relaxed);
 }
 
-inline void tcp::__close() {
+void tcp::__close() {
     ::close(fd);
     set_status(closed);
     set_valid(false);

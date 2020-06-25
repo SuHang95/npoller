@@ -26,7 +26,7 @@ public:
     std::shared_ptr<_Tp> create_io(_Args &&...);
 
     template<typename... _Args>
-    std::future<std::shared_ptr<tcp>> create_tcp_async(const char *addr, unsigned short int port,_Args &&... args);
+    std::future<std::shared_ptr<tcp>> create_tcp_async(const char *addr, unsigned short int port, _Args &&... args);
 
 private:
 
@@ -40,7 +40,7 @@ private:
 
 template<typename _Tp, typename... _Args>
 std::shared_ptr<_Tp> io_factory::create_io_in_eventloop(_Args &&... __args) {
-    std::shared_ptr<_Tp> io_ptr = std::make_shared<_Tp>(io::this_is_private(0),std::forward<_Args>(__args)...);
+    std::shared_ptr<_Tp> io_ptr = std::make_shared<_Tp>(io::this_is_private(0), std::forward<_Args>(__args)...);
     if (ev_processor->add_io(std::dynamic_pointer_cast<io>(io_ptr))) {
         return io_ptr;
     }
@@ -48,7 +48,6 @@ std::shared_ptr<_Tp> io_factory::create_io_in_eventloop(_Args &&... __args) {
     io_ptr->set_valid(false);
     return std::shared_ptr<_Tp>();
 }
-
 
 
 template<typename _Tp, typename... _Args>
@@ -84,18 +83,34 @@ std::shared_ptr<_Tp> io_factory::create_io(_Args &&... __args) {
 
 template<typename... _Args>
 std::future<std::shared_ptr<tcp>>
-io_factory::create_tcp_async(const char *addr, unsigned short int port,_Args &&... args){
-    std::promise<std::shared_ptr<tcp>> tcp_instance( std::make_shared<tcp>
-            (io::this_is_private(0),std::forward<_Args>(__args)...));
-    std::function<void()> task([=]) mutable {
-        tcp_instance->connect();
-        if (tcp_instance->tcp_status == 2)
-            tcp_indication.set_value(std::move(tcp_instance));
-        else
-            tcp_indication.set_exception(std::current_exception());
-    } 
-    ev_processor->add_task(task)
-    std::future<std::shared_ptr<tcp>> future = prom->get_future;
+io_factory::create_tcp_async(const char *addr, unsigned short int port, _Args &&... args) {
+
+    std::promise<std::shared_ptr<tcp>> connect_promise;
+    std::future<std::shared_ptr<tcp>> connect_future = connect_promise.get_future();
+
+
+    std::packaged_task<std::shared_ptr<tcp>()> *connected_handler = new std::packaged_task<std::shared_ptr<tcp>()>(
+            [=]() mutable -> std::shared_ptr<tcp>{
+                 std::shared_ptr<tcp> tcp_instance=connect_future.get();
+                 return tcp_instance;
+            }
+    );
+
+    std::future<std::shared_ptr<tcp>> future = connected_handler->get_future();
+
+    std::shared_ptr<std::packaged_task<void()>> connect_task =
+            std::make_shared<std::packaged_task<void()>>(
+                    [=]() mutable {
+                        std::shared_ptr<tcp> tcp_instance = create_io_in_eventloop(std::forward<_Args>(args)...);
+                        tcp_instance->connect(addr, port);
+                        connect_promise.set_value(tcp_instance);
+                    });
+    std::function<void()> task([=]() mutable {
+        (*connect_task)();
+    });
+
+    ev_processor->add_task(task);
+
     return future;
 }
 
