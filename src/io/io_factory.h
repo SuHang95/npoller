@@ -89,10 +89,14 @@ io_factory::create_tcp_async(const char *addr, unsigned short int port, _Args &&
     std::future<std::shared_ptr<tcp>> connect_future = connect_promise.get_future();
 
 
-    std::packaged_task<std::shared_ptr<tcp>()> *connected_handler = new std::packaged_task<std::shared_ptr<tcp>()>(
-            [=]() mutable -> std::shared_ptr<tcp>{
-                 std::shared_ptr<tcp> tcp_instance=connect_future.get();
-                 return tcp_instance;
+    std::packaged_task<std::shared_ptr<tcp>(bool)> *connected_handler = new std::packaged_task<std::shared_ptr<tcp>(
+            bool)>(
+            [=](bool successful) mutable -> std::shared_ptr<tcp> {
+                if (successful) {
+                    return connect_future.get();
+                } else {
+                    return std::shared_ptr<tcp>();
+                }
             }
     );
 
@@ -102,9 +106,11 @@ io_factory::create_tcp_async(const char *addr, unsigned short int port, _Args &&
             std::make_shared<std::packaged_task<void()>>(
                     [=]() mutable {
                         std::shared_ptr<tcp> tcp_instance = create_io_in_eventloop(std::forward<_Args>(args)...);
-                        tcp_instance->connect(addr, port);
                         connect_promise.set_value(tcp_instance);
+                        tcp_instance->set_connected_handler(connected_handler);
+                        tcp_instance->connect(addr, port);
                     });
+
     std::function<void()> task([=]() mutable {
         (*connect_task)();
     });

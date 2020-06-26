@@ -10,7 +10,7 @@
 #include<sys/un.h>
 #include<netinet/in.h>
 #include<arpa/inet.h>
-
+#include<future>
 
 class tcp : public io {
 public:
@@ -69,6 +69,8 @@ protected:
 
     std::atomic<tcp_status> __status;
 
+    std::packaged_task<std::shared_ptr<tcp>(bool)> *connected_handler;
+
     //these inline function never use lock!
     inline sockaddr_in make_sockaddr_in(in_addr_t addr, int port);
 
@@ -80,7 +82,7 @@ protected:
 
     static inline io::io_type get_io_type(tcp_status _status);
 
-
+    inline void set_connected_handler(std::packaged_task<std::shared_ptr<tcp>(bool)> *handler);
 
     inline tcp_status status_unsafe();
 
@@ -143,7 +145,7 @@ inline tcp::tcp_status tcp::status_unsafe() {
 }
 
 
-inline tcp::tcp_status tcp::status() const{
+inline tcp::tcp_status tcp::status() const {
     return __status.load(std::memory_order_relaxed);
 }
 
@@ -163,6 +165,10 @@ inline void tcp::prepare_close() {
         set_writable(false);
         set_readable(false);
     }
+}
+
+inline void tcp::set_connected_handler(std::packaged_task<std::shared_ptr<tcp>(bool)> *handler) {
+    this->connected_handler = handler;
 }
 
 #endif

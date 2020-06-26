@@ -72,7 +72,7 @@ void tcp::connect(const char *__addr, unsigned short int __port) {
             __close();
         } else if (errno == EALREADY) {
             set_status(connecting);
-        }  else if (errno == EISCONN) {
+        } else if (errno == EISCONN) {
             set_status(connected);
             set_readable(true);
             set_writable(true);
@@ -91,7 +91,7 @@ void tcp::connect(const char *__addr, unsigned short int __port) {
         set_readable(true);
         set_writable(true);
         set_write_busy(false);
-        support_epollrdhup=true;
+        support_epollrdhup = true;
 
         address = other;
         port = __port;
@@ -150,9 +150,19 @@ bool tcp::process_event(::epoll_event &ev) {
             if (status() == connecting) {
                 return get_event(ev);
             } else if (status() == connected) {
+                if (connected_handler != nullptr) {
+                    (*connected_handler)(true);
+                    delete connected_handler;
+                    connected_handler = nullptr;
+                }
                 break;
             } else {
                 close();
+                if (connected_handler != nullptr) {
+                    (*connected_handler)(false);
+                    delete connected_handler;
+                    connected_handler = nullptr;
+                }
                 return false;
             }
         case connected:
