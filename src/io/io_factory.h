@@ -34,13 +34,17 @@ private:
     std::shared_ptr<_Tp> create_io_in_eventloop(_Args &&... args);
 
     event_processor *ev_processor;
-    std::promise<std::shared_ptr<tcp>> tcp_indication;
 };
 
 
 template<typename _Tp, typename... _Args>
 std::shared_ptr<_Tp> io_factory::create_io_in_eventloop(_Args &&... __args) {
     std::shared_ptr<_Tp> io_ptr = std::make_shared<_Tp>(io::this_is_private(0), std::forward<_Args>(__args)...);
+
+    if (io_ptr == nullptr) {
+        return std::shared_ptr<_Tp>();
+    }
+
     if (ev_processor->add_io(std::dynamic_pointer_cast<io>(io_ptr))) {
         return io_ptr;
     }
@@ -89,7 +93,7 @@ io_factory::create_tcp_async(const char *addr, unsigned short int port, _Args &&
     std::future<std::shared_ptr<tcp>> connect_future = connect_promise.get_future();
 
 
-    std::packaged_task<std::shared_ptr<tcp>(bool)>* connected_handler =
+    std::packaged_task<std::shared_ptr<tcp>(bool)> *connected_handler =
             new std::packaged_task<std::shared_ptr<tcp>(bool)>(
                     [=](bool successful) mutable -> std::shared_ptr<tcp> {
                         return successful ? connect_future.get() : std::shared_ptr<tcp>();

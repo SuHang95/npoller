@@ -42,7 +42,7 @@ event_processor::event_processor(const logger &__log) noexcept
 
     status.store(initialized, std::memory_order_release);
 
-    while (status.load(std::memory_order_relaxed) != working) {
+    while (status.load(std::memory_order_relaxed) <= invalid) {
         usleep(wait_micro_second);
     }
 }
@@ -82,8 +82,9 @@ event_processor::~event_processor() {
 }
 
 bool event_processor::add_io(std::shared_ptr<io> _io) throw() {
-    if (status.load(std::memory_order_relaxed) != working || !_io->valid_safe() ||
-        _io->fd == epfd) {
+    event_processor::status_code status_local = status.load(std::memory_order_relaxed);
+    if ((status_local != working && status_local != ready_waiting) || _io == nullptr ||
+        !_io->valid_safe() || _io->fd == epfd) {
 
         log.warn("A file descriptor %d invalid or closed"
                  "was tried to add in an epoll instance!", _io->id());
@@ -305,8 +306,8 @@ void event_processor::process() {
 void event_processor::add_task(const std::function<void()> &task) {
     task_list.push(task);
     if (id() != std::this_thread::get_id() &&
-        this->status.load(std::memory_order_relaxed) == working) {
-        
+        this->status.load(std::memory_order_relaxed) != working) {
+
         unsigned char temp[1] = {task_signal};
         if (write(pipe_fd[1], temp, 1) <= 0) {
             //if the worker thread has not waken up

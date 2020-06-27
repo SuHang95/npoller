@@ -7,7 +7,7 @@
 
 
 io::io(const this_is_private& p,int _fd, io_type type, const logger &_log) :
-        fd(_fd), log(_log) {
+        fd(_fd), log(_log),valid(true) {
 
     int ret = fcntl(fd, F_SETFL, O_NONBLOCK);
 
