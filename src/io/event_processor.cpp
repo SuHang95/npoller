@@ -231,15 +231,23 @@ void event_processor::process() {
     bool close_flag;
 
     while (1) {
-        process_instant_write();
 
+        status.store(ready_waiting, std::memory_order_relaxed);
+
+        process_task_queue();
+
+        process_instant_write();
         //detect if we need close this event loop
         if (close_flag) {
             status.store(stop_work, std::memory_order_release);
             return;
         }
 
+        status.store(waiting, std::memory_order_relaxed);
+
         int fd_nums = epoll_wait(epfd, event_buff, max_events, -1);
+
+        status.store(working, std::memory_order_relaxed);
 
         if (fd_nums < 0) {
             if (errno == EINTR) {
@@ -294,9 +302,11 @@ void event_processor::process() {
 }
 
 
-void event_processor::add_task(const std::function<void()>& task) {
+void event_processor::add_task(const std::function<void()> &task) {
     task_list.push(task);
-    if(id()!=std::this_thread::get_id()){
+    if (id() != std::this_thread::get_id() &&
+        this->status.load(std::memory_order_relaxed) == working) {
+        
         unsigned char temp[1] = {task_signal};
         if (write(pipe_fd[1], temp, 1) <= 0) {
             //if the worker thread has not waken up
@@ -305,6 +315,14 @@ void event_processor::add_task(const std::function<void()>& task) {
     }
 }
 
-io_factory event_processor::get_factory(){
+
+void event_processor::process_task_queue() {
+    std::function<void()> task;
+    while (task_list.try_pop(task)) {
+        task();
+    }
+}
+
+io_factory event_processor::get_factory() {
     return io_factory(this);
 }

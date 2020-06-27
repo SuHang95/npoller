@@ -44,7 +44,7 @@ private:
 
         inline explicit internal_logger():simple_logger(){}
 
-        virtual ~internal_logger();
+        virtual ~internal_logger(){};
 
     private:
         std::mutex _mutex;
@@ -134,7 +134,7 @@ void logger::internal_logger::print(const char *level, const std::string &text) 
 
 logger::internal_logger::internal_logger(const std::string &name, logger::log_level level,
                                          log_time_strategy name_strategy,
-                                         log_time_strategy log_strategy, bool sync) {
+                                         log_time_strategy log_strategy, bool sync){
     std::unique_lock<std::mutex> _g(this->_mutex);
 
     this->name = name;

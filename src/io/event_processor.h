@@ -62,7 +62,7 @@ public:
 
     std::thread::id id() const;
 
-    void add_task(const std::function<void()>& task);
+    void add_task(const std::function<void()> &task);
 
     logger get_logger();
 
@@ -84,6 +84,8 @@ protected:
     logger log;
 
     void process_instant_write();
+    
+    void process_task_queue();
 
     tbb::concurrent_hash_map<int, std::shared_ptr<io>> io_map;
 
@@ -108,9 +110,11 @@ protected:
         initialized = 1,
         invalid = 2,
         working = 3,
-        ready_close = 4,
-        stop_work = 5,
-        closed = 6,
+        ready_waiting = 4,
+        waiting = 5,
+        ready_close = 6,
+        stop_work = 7,
+        closed = 8,
     };
 
     tbb::concurrent_queue<std::function<void()>> task_list;
@@ -137,7 +141,6 @@ inline std::thread::id event_processor::id() const {
 inline logger event_processor::get_logger() {
     return log;
 }
-
 
 
 #endif

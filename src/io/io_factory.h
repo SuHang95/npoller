@@ -89,16 +89,12 @@ io_factory::create_tcp_async(const char *addr, unsigned short int port, _Args &&
     std::future<std::shared_ptr<tcp>> connect_future = connect_promise.get_future();
 
 
-    std::packaged_task<std::shared_ptr<tcp>(bool)> *connected_handler = new std::packaged_task<std::shared_ptr<tcp>(
-            bool)>(
-            [=](bool successful) mutable -> std::shared_ptr<tcp> {
-                if (successful) {
-                    return connect_future.get();
-                } else {
-                    return std::shared_ptr<tcp>();
-                }
-            }
-    );
+    std::packaged_task<std::shared_ptr<tcp>(bool)>* connected_handler =
+            new std::packaged_task<std::shared_ptr<tcp>(bool)>(
+                    [=](bool successful) mutable -> std::shared_ptr<tcp> {
+                        return successful ? connect_future.get() : std::shared_ptr<tcp>();
+                    }
+            );
 
     std::future<std::shared_ptr<tcp>> future = connected_handler->get_future();
 
