@@ -8,8 +8,8 @@
 #include <sys/time.h>
 #include "simple_logger.h"
 
-simple_logger::simple_logger(const std::string &name, log_level level, log_time_strategy name_strategy,
-                             log_time_strategy log_strategy, bool sync) : name_time(log_time()) {
+simple_logger::simple_logger(const std::string &name, log_level level, bool sync, log_time_strategy name_strategy,
+                             log_time_strategy log_strategy) : name_time(log_time()) {
     this->name = name;
     this->name_strategy = name_strategy;
     this->log_strategy = log_strategy;
@@ -66,6 +66,10 @@ void simple_logger::print(const char *level, const char *format, va_list args) {
         new_fmt_str = new_format_str(format, time_str, level,
                                      stack_addr, use_stack_addr, fmt_str_len);
         write_success = vfprintf(fmt_str_len, new_fmt_str, args);
+
+        if (is_sync) {
+            write_success &= (::fflush(fp) == EOF);
+        }
     }
 
     if (!write_success) {

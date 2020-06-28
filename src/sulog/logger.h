@@ -9,8 +9,9 @@
 //a logger which can access by multi thread,but can't be copied
 class logger : public base_logger {
 public:
-    explicit inline logger(const std::string &name, log_level level, log_time_strategy name_strategy = day,
-                           log_time_strategy log_strategy = millisecond, bool sync = false);
+    explicit inline logger(const std::string &name, log_level level, bool sync = false,
+                           log_time_strategy name_strategy = day,
+                           log_time_strategy log_strategy = millisecond);
 
     explicit inline logger();
 
@@ -35,16 +36,18 @@ public:
 
     virtual inline void debug(const std::string &) final;
 
+    virtual inline bool is_debug_enable() const;
+
 private:
     class internal_logger : public simple_logger {
     public:
-        explicit inline internal_logger(const std::string &name, logger::log_level level,
-                                 log_time_strategy name_strategy = day,
-                                 log_time_strategy log_strategy = millisecond, bool sync = false);
+        explicit inline internal_logger(const std::string &name, logger::log_level level, bool sync = false,
+                                        log_time_strategy name_strategy = day,
+                                        log_time_strategy log_strategy = millisecond);
 
-        inline explicit internal_logger():simple_logger(){}
+        inline explicit internal_logger() : simple_logger() {}
 
-        virtual ~internal_logger(){};
+        virtual ~internal_logger() {};
 
     private:
         std::mutex _mutex;
@@ -72,6 +75,7 @@ private:
 
 
     };
+
     reentrant_spin_lock lock;
     std::shared_ptr<internal_logger> log;
 
@@ -132,9 +136,8 @@ void logger::internal_logger::print(const char *level, const std::string &text) 
     return simple_logger::print(level, text);
 }
 
-logger::internal_logger::internal_logger(const std::string &name, logger::log_level level,
-                                         log_time_strategy name_strategy,
-                                         log_time_strategy log_strategy, bool sync){
+logger::internal_logger::internal_logger(const std::string &name, logger::log_level level, bool sync,
+                                         log_time_strategy name_strategy, log_time_strategy log_strategy) {
     std::unique_lock<std::mutex> _g(this->_mutex);
 
     this->name = name;
@@ -146,15 +149,15 @@ logger::internal_logger::internal_logger(const std::string &name, logger::log_le
     open_file();
 }
 
-logger::logger(const std::string &name, log_level level, log_time_strategy name_strategy,
-               log_time_strategy log_strategy, bool sync) :
-        log(std::make_shared<internal_logger>(name, level,
-                                              name_strategy, log_strategy, sync)) {}
+logger::logger(const std::string &name, log_level level, bool sync,
+               log_time_strategy name_strategy, log_time_strategy log_strategy) :
+        log(std::make_shared<internal_logger>(name, level, sync,
+                                              name_strategy, log_strategy)) {}
 
-logger::logger():log(empty_logger){}
+logger::logger() : log(empty_logger) {}
 
 logger::logger(const logger &that) {
-    std::unique_lock<reentrant_spin_lock> t(const_cast<reentrant_spin_lock&>(that.lock));
+    std::unique_lock<reentrant_spin_lock> t(const_cast<reentrant_spin_lock &>(that.lock));
     log = that.log;
 }
 
@@ -167,9 +170,9 @@ logger &logger::operator=(const logger &that) {
     const logger *second = this > &that ? this : &that;
 
     {
-        std::unique_lock<reentrant_spin_lock> t(const_cast<reentrant_spin_lock&>(first->lock));
+        std::unique_lock<reentrant_spin_lock> t(const_cast<reentrant_spin_lock &>(first->lock));
         {
-            std::unique_lock<reentrant_spin_lock> t1(const_cast<reentrant_spin_lock&>(second->lock));
+            std::unique_lock<reentrant_spin_lock> t1(const_cast<reentrant_spin_lock &>(second->lock));
             this->log = that.log;
         }
     }
@@ -218,6 +221,10 @@ void logger::error(const char *format, ...) {
 
 void logger::error(const std::string &text) {
     log->simple_logger::error(text);
+}
+
+bool logger::is_debug_enable() const {
+    return log->is_debug_enable();
 }
 
 #endif

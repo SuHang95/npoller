@@ -42,7 +42,10 @@ public:
 
     virtual void debug(const std::string &) = 0;
 
+    virtual bool is_debug_enable() const = 0;
+
     std::string time(log_time_strategy);
+
 protected:
 
     //时间的值，精确到name_strategy中的时间单位

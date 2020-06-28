@@ -15,8 +15,8 @@
 class simple_logger : base_logger {
 public:
 
-    explicit simple_logger(const std::string &name, log_level level, log_time_strategy name_strategy = day,
-                           log_time_strategy log_strategy = millisecond, bool sync = false);
+    explicit simple_logger(const std::string &name, log_level level, bool sync = false, log_time_strategy name_strategy = day,
+                           log_time_strategy log_strategy = millisecond);
 
     inline explicit simple_logger();
 
@@ -65,6 +65,10 @@ public:
     }
 
     inline void debug(const char *format, va_list args);
+
+    inline bool is_debug_enable() const{
+        return level <= DEBUG;
+    }
 
     virtual ~simple_logger();
 

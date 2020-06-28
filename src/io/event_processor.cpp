@@ -1,6 +1,7 @@
 #include "event_processor.h"
 #include "io.h"
 #include "io_factory.h"
+#include <bits/stdc++.h>
 
 const int io::max_retry_times = 3;
 
@@ -42,6 +43,9 @@ event_processor::event_processor(const logger &__log) noexcept
 
     status.store(initialized, std::memory_order_release);
 
+    log.debug("Event processor create successful,id:%llu,thread_id:%llu,out pipe fd:%d,in pipe fd:%d,"
+              "epoll fd:%d!", id(),std::hash<std::thread::id>()(thread_id()),pipe_fd[1],pipe_fd[0],epfd);
+
     while (status.load(std::memory_order_relaxed) <= invalid) {
         usleep(wait_micro_second);
     }
@@ -59,7 +63,7 @@ event_processor::~event_processor() {
         return;
     }
 
-    log.info("An Epoll instance %d will be destroyed!", epfd);
+    log.debug("An Epoll instance thread_id:%llu will be destroyed!", id());
     status.store(ready_close, std::memory_order_relaxed);
 
     unsigned char temp[1] = {close_signal};
@@ -152,6 +156,9 @@ bool event_processor::add_write_instant_task(int fd) {
     }
 
     ready_to_write.push(std::move(io_ptr));
+
+    notify_event();
+
     return true;
 }
 
@@ -194,6 +201,8 @@ void event_processor::init() {
     }
     worker_id.store(std::this_thread::get_id(), std::memory_order_relaxed);
 
+    log.debug("The event loop of event processor:%llu start!", id());
+
     process();
 }
 
@@ -229,7 +238,7 @@ void event_processor::process_instant_write() {
 
 
 void event_processor::process() {
-    bool close_flag;
+    bool close_flag = false;
 
     while (1) {
 
@@ -249,6 +258,8 @@ void event_processor::process() {
         int fd_nums = epoll_wait(epfd, event_buff, max_events, -1);
 
         status.store(working, std::memory_order_relaxed);
+
+        log.debug("The event processor:%llu wake up,event nums:%d!", id(), fd_nums);
 
         if (fd_nums < 0) {
             if (errno == EINTR) {
@@ -279,7 +290,13 @@ void event_processor::process() {
                              epfd);
                     continue;
                 }
-                log.debug("Some event occurred on descriptor %d", (event_buff[i].data.fd));
+                if (log.is_debug_enable()) {
+                    uint8_t in = event_buff[i].events & EPOLLIN;
+                    uint8_t out = event_buff[i].events & EPOLLOUT;
+                    uint8_t rdhup = event_buff[i].events & EPOLLRDHUP;
+                    log.debug("Some event occurred on descriptor %d,in event:%d,out event:%d,rdhup event:%d", (event_buff[i].data.fd),
+                            in,out,rdhup);
+                }
                 io_ptr = accessor->second;
             }
             //to get some status such that we can avoid some unnecessary epoll_ctl modify!
@@ -305,7 +322,7 @@ void event_processor::process() {
 
 void event_processor::add_task(const std::function<void()> &task) {
     task_list.push(task);
-    if (id() != std::this_thread::get_id() &&
+    if (thread_id() != std::this_thread::get_id() &&
         this->status.load(std::memory_order_relaxed) != working) {
 
         unsigned char temp[1] = {task_signal};
@@ -316,6 +333,19 @@ void event_processor::add_task(const std::function<void()> &task) {
     }
 }
 
+void event_processor::notify_event() {
+    status_code _status = this->status.load(std::memory_order_relaxed);
+    log.debug("Try to wake up the main thread of event processor:%llu,status:%d!", id(), _status);
+    if (thread_id() != std::this_thread::get_id() &&
+        _status != working) {
+
+        unsigned char temp[1] = {task_signal};
+        if (write(pipe_fd[1], temp, 1) <= 0) {
+            //if the worker thread has not waken up
+            log.warn("The worker thread is not waked up:%s!", strerror(errno));
+        }
+    }
+}
 
 void event_processor::process_task_queue() {
     std::function<void()> task;

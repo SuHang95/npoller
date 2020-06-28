@@ -25,6 +25,9 @@ public:
     template<typename _Tp, typename... _Args>
     std::shared_ptr<_Tp> create_io(_Args &&...);
 
+    template<typename _Tp, typename... _Args>
+    void create_io_with_callback(std::function<void(std::shared_ptr<_Tp>)>& callback, _Args &&...);
+
     template<typename... _Args>
     std::future<std::shared_ptr<tcp>> create_tcp_async(const char *addr, unsigned short int port, _Args &&... args);
 
@@ -76,8 +79,18 @@ io_factory::create_io_async(_Args &&... __args) {
 }
 
 template<typename _Tp, typename... _Args>
+void io_factory::create_io_with_callback(std::function<void(std::shared_ptr<_Tp>)>& callback, _Args &&... __args) {
+    std::function<void()> task([=](){
+        std::shared_ptr<_Tp> ptr = create_io_in_eventloop<_Tp>(std::forward<_Args>(__args)...);
+        callback(ptr);
+    });
+
+    ev_processor->add_task(task);
+}
+
+template<typename _Tp, typename... _Args>
 std::shared_ptr<_Tp> io_factory::create_io(_Args &&... __args) {
-    if (this->ev_processor->id() == std::this_thread::get_id()) {
+    if (this->ev_processor->thread_id() == std::this_thread::get_id()) {
         return create_io_in_eventloop<_Tp>(std::forward<_Args>(__args)...);
     } else {
         std::future<std::shared_ptr<_Tp>> io_future = create_io_async<_Tp>(std::forward<_Args>(__args)...);

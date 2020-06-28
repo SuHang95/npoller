@@ -39,24 +39,32 @@ class print_task : task {
 public:
     print_task(event_processor &__processor, logger __log) :
             processor(__processor), log(__log) {
-        op = std::make_shared<print_op>("Hello World", dynamic_cast<task*>(this), 1);
+        op = std::make_shared<print_op>("Hello World!", dynamic_cast<task *>(this), 1);
     }
 
     void run() {
         if (state == 0) {
             io::io_type type;
             type.support_epollrdhup = 0;
-            type.writable=1;
-            type.readable=0;
+            type.writable = 1;
+            type.readable = 0;
 
-            auto out = processor.get_factory().create_io<io>(1,type,processor.get_logger());
+            std::function<void(std::shared_ptr<io>)> callback = [=](std::shared_ptr<io> ptr) {
+                log.info("Get io instance, which id is:%d", ptr->id());
+                if (ptr != nullptr && ptr->regist(std::dynamic_pointer_cast<io_op>(op))) {
+                    this->state = 1;
+                } else {
+                    this->state = 2;
+                    this->log.info("print task can not add in io out!");
+                }
+            };
 
-            if (out->regist(std::dynamic_pointer_cast<io_op>(op))) {
-                state = 1;
-            } else {
-                state = 2;
-                log.info("print task can not add in io out!");
-            }
+            //not callback mode
+            //auto out = processor.get_factory().create_io<io>(1, type, processor.get_logger());
+            //callback(out);
+
+            //callback mode
+            processor.get_factory().create_io_with_callback<io>(callback, 1, type, processor.get_logger());
 
             return;
         }
@@ -89,7 +97,7 @@ private:
 };
 
 int main() {
-    logger log("logfile", logger::DEBUG);
+    logger log("logfile", logger::DEBUG, true);
     event_processor manager(log);
     print_task hello(manager, log);
     hello.run();

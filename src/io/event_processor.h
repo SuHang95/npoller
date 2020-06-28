@@ -60,7 +60,9 @@ public:
 
     bool add_write_instant_task(int fd);
 
-    std::thread::id id() const;
+    size_t id() const {
+        return reinterpret_cast<size_t>(this);
+    }
 
     void add_task(const std::function<void()> &task);
 
@@ -74,6 +76,10 @@ protected:
     void process();
 
     void close();
+
+    void notify_event();
+
+    std::thread::id thread_id() const;
 
     //file descriptor
     const int epfd;
@@ -134,7 +140,7 @@ protected:
     friend class io_factory;
 };
 
-inline std::thread::id event_processor::id() const {
+inline std::thread::id event_processor::thread_id() const {
     return worker_id.load(std::memory_order_relaxed);
 }
 
