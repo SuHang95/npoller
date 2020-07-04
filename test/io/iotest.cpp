@@ -60,8 +60,8 @@ public:
             };
 
             //not callback mode
-            //auto out = processor.get_factory().create_io<io>(1, type, processor.get_logger());
-            //callback(out);
+            /*auto out = processor.get_factory().create_io<io>(1, type, processor.get_logger());
+            callback(out);*/
 
             //callback mode
             processor.get_factory().create_io_with_callback<io>(callback, 1, type, processor.get_logger());

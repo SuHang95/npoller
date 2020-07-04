@@ -91,7 +91,22 @@ protected:
 
     void process_instant_write();
     
-    void process_task_queue();
+    void process_task_queue(int&);
+
+    enum status_code : unsigned char {
+        initializing = 0,
+        initialized = 1,
+        invalid = 2,
+        working = 3,
+        ready_waiting = 4,
+        waiting = 5,
+        ready_close = 6,
+        stop_work = 7,
+        closed = 8,
+    };
+
+    //-1 means uninitialized.0 means not valid,1 means valid
+    std::atomic<status_code> status;
 
     tbb::concurrent_hash_map<int, std::shared_ptr<io>> io_map;
 
@@ -111,24 +126,13 @@ protected:
 
     //used only for init and none-synchronized api
 
-    enum status_code : unsigned char {
-        initializing = 0,
-        initialized = 1,
-        invalid = 2,
-        working = 3,
-        ready_waiting = 4,
-        waiting = 5,
-        ready_close = 6,
-        stop_work = 7,
-        closed = 8,
-    };
-
     tbb::concurrent_queue<std::function<void()>> task_list;
 
-    //-1 means uninitialized.0 means not valid,1 means valid
-    std::atomic<status_code> status;
+    std::deque<std::pair<std::function<void()>,int>> local_task_list;
 
     epoll_event *event_buff;
+
+    std::atomic<size_t> task_index;
 
     enum signal : unsigned char {
         close_signal = 0,

@@ -80,7 +80,7 @@ io_factory::create_io_async(_Args &&... __args) {
 
 template<typename _Tp, typename... _Args>
 void io_factory::create_io_with_callback(std::function<void(std::shared_ptr<_Tp>)>& callback, _Args &&... __args) {
-    std::function<void()> task([=](){
+    std::function<void()> task([=]() mutable{
         std::shared_ptr<_Tp> ptr = create_io_in_eventloop<_Tp>(std::forward<_Args>(__args)...);
         callback(ptr);
     });

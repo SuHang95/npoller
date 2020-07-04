@@ -44,7 +44,7 @@ event_processor::event_processor(const logger &__log) noexcept
     status.store(initialized, std::memory_order_release);
 
     log.debug("Event processor create successful,id:%llu,thread_id:%llu,out pipe fd:%d,in pipe fd:%d,"
-              "epoll fd:%d!", id(),std::hash<std::thread::id>()(thread_id()),pipe_fd[1],pipe_fd[0],epfd);
+              "epoll fd:%d!", id(), std::hash<std::thread::id>()(thread_id()), pipe_fd[1], pipe_fd[0], epfd);
 
     while (status.load(std::memory_order_relaxed) <= invalid) {
         usleep(wait_micro_second);
@@ -239,12 +239,13 @@ void event_processor::process_instant_write() {
 
 void event_processor::process() {
     bool close_flag = false;
+    int task_index = 0;
 
     while (1) {
 
         status.store(ready_waiting, std::memory_order_relaxed);
 
-        process_task_queue();
+        process_task_queue(task_index);
 
         process_instant_write();
         //detect if we need close this event loop
@@ -294,8 +295,9 @@ void event_processor::process() {
                     uint8_t in = event_buff[i].events & EPOLLIN;
                     uint8_t out = event_buff[i].events & EPOLLOUT;
                     uint8_t rdhup = event_buff[i].events & EPOLLRDHUP;
-                    log.debug("Some event occurred on descriptor %d,in event:%d,out event:%d,rdhup event:%d", (event_buff[i].data.fd),
-                            in,out,rdhup);
+                    log.debug("Some event occurred on descriptor %d,in event:%d,out event:%d,rdhup event:%d",
+                              (event_buff[i].data.fd),
+                              in, out, rdhup);
                 }
                 io_ptr = accessor->second;
             }
@@ -321,15 +323,18 @@ void event_processor::process() {
 
 
 void event_processor::add_task(const std::function<void()> &task) {
-    task_list.push(task);
-    if (thread_id() != std::this_thread::get_id() &&
-        this->status.load(std::memory_order_relaxed) != working) {
-
-        unsigned char temp[1] = {task_signal};
-        if (write(pipe_fd[1], temp, 1) <= 0) {
-            //if the worker thread has not waken up
-            log.warn("The worker thread is not waked up:%s!", strerror(errno));
+    if (thread_id() != std::this_thread::get_id()) {
+        task_index.fetch_add(1);
+        task_list.push(task);
+        if (this->status.load(std::memory_order_relaxed) != working) {
+            unsigned char temp[1] = {task_signal};
+            if (write(pipe_fd[1], temp, 1) <= 0) {
+                //if the worker thread has not waken up
+                log.warn("The worker thread is not waked up:%s!", strerror(errno));
+            }
         }
+    } else {
+        size_t new_task_index = task_index.fetch_add(1);
     }
 }
 
@@ -347,10 +352,29 @@ void event_processor::notify_event() {
     }
 }
 
-void event_processor::process_task_queue() {
+void event_processor::process_task_queue(int &index) {
     std::function<void()> task;
+    while (!local_task_list.empty()) {
+        if (local_task_list[0].second == index + 1) {
+            local_task_list[0].first();
+            local_task_list.pop_front();
+            index++;
+
+            continue;
+        }
+
+        if (task_list.try_pop(task)) {
+            task();
+            index++;
+        } else {
+            log.error("An queue fatal occurred in event_processor:%d!", id());
+            throw std::runtime_error("Queue fatal in task queue of event processor!");
+        }
+    }
+
     while (task_list.try_pop(task)) {
         task();
+        index++;
     }
 }
 

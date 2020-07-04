@@ -21,8 +21,8 @@ const int cache_line_size = 64;
 //the file type used by this class must support epoll and non-blocking
 class io {
 protected:
-    struct this_is_private{
-        explicit inline this_is_private(int d){}
+    struct this_is_private {
+        explicit inline this_is_private(int d) {}
     };
 
 public:
@@ -33,10 +33,13 @@ public:
     };
 
     //the protected method is only used on event loop thread
-    io(const this_is_private& ,int _fd, io_type, const logger &_log);
+    io(const this_is_private &, const int _fd, const io_type, const logger &_log);
 
-    io(const this_is_private&,int _fd, io_type type) : io(this_is_private(0),_fd, type, logger("io" + std::hash<std::string>{}(
-            std::to_string(fd + reinterpret_cast<size_t>(this))), logger::INFO)) {}
+    io(const this_is_private &, const int _fd, const io_type type) : io(this_is_private(0), _fd, type,
+                                                                        logger("io" + std::hash<std::string>{}(
+                                                                                std::to_string(fd +
+                                                                                               reinterpret_cast<size_t>(this))),
+                                                                               logger::INFO)) {}
 
     io(const io &) = delete;
 
