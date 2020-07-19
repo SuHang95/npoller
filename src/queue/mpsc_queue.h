@@ -12,7 +12,7 @@
 #include<sstream>
 
 template<typename T>
-class locally_queue {
+class mpsc_queue {
 private:
     std::atomic<uint64_t> index;
     std::deque<std::pair<T, uint64_t>> local_queue;
@@ -20,35 +20,37 @@ private:
     //the index of last consumed item
     uint64_t consumed_index;
     //char padding[64 - 8 - sizeof(std::deque<T>) - sizeof(std::thread::id) - 8];
-    tbb::concurrent_queue<std::pair<T, uint64_t>> concurrent_queue;
+    tbb::concurrent_queue<T> concurrent_queue;
 public:
-    explicit locally_queue(std::thread::id local_thread_id, size_t initial_size) :
+    explicit mpsc_queue(std::thread::id local_thread_id, size_t initial_size) :
             local_queue(initial_size), index(0), thread_id(local_thread_id), consumed_index(-1) {}
 
-    explicit locally_queue(size_t initial_size = 0) : locally_queue(std::this_thread::get_id(), initial_size) {}
+    explicit mpsc_queue(size_t initial_size = 0) : mpsc_queue(std::this_thread::get_id(), initial_size) {}
 
     void push(const T &source) {
-        uint64_t l_index = index.fetch_add(1);
         if (std::this_thread::get_id() == thread_id) {
+            uint64_t l_index = index.fetch_add(1);
             local_queue.emplace_back(source, l_index);
         } else {
-            concurrent_queue.emplace(source, l_index);
+            index.fetch_add(1);
+            concurrent_queue.emplace(source);
         }
     }
 
     void push(T &&source) {
-        uint64_t l_index = index.fetch_add(1);
         if (std::this_thread::get_id() == thread_id) {
+            uint64_t l_index = index.fetch_add(1);
             local_queue.emplace_back(source, l_index);
         } else {
-            concurrent_queue.emplace(std::move(source), l_index);
+            index.fetch_add(1);
+            concurrent_queue.emplace(std::move(source));
         }
     }
 
     bool try_pop(T &destination) {
         if (std::this_thread::get_id() != thread_id) {
             std::stringstream ss;
-            ss << "Try to pop value of locally_queue in thread " << std::this_thread::get_id() <<
+            ss << "Try to pop value of queue in thread " << std::this_thread::get_id() <<
                " with master thread of queue is " << thread_id;
             throw std::runtime_error(ss.str());
         } else {
@@ -61,21 +63,22 @@ public:
                     return true;
                 }
             }
-            std::pair<T, uint64_t> item;
+            T item;
             int loop_time = 0;
             bool success = false;
-            bool loop = ((consumed_index+1) < index.load(std::memory_order_relaxed));
-            do {
-                success = concurrent_queue.try_pop(item);
-                if (success && (item.second == consumed_index + 1)) {
-                    consumed_index++;
-                    return std::move(item.first);
-                }
+            /*uint64_t l_index = index.load(std::memory_order_relaxed);
+            if (consumed_index + 1 == l_index) {
+                return false;
+            }*/
 
-                if (success) {
-                    throw std::runtime_error("Disordered item in local queue!");
+            //do {
+                if (concurrent_queue.try_pop(destination)) {
+                    consumed_index++;
+                    return true;
                 }
-            } while (loop && loop_time++ < 10);
+            //} while ((consumed_index + 1 < l_index) && loop_time++ < 3);
+
+            return false;
         }
     }
 
