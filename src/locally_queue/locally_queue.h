@@ -12,14 +12,14 @@
 #include<sstream>
 
 template<typename T>
-class locally_queue<T> {
+class locally_queue {
 private:
-    std::atomic<uint64_T> index;
+    std::atomic<uint64_t> index;
     std::deque<std::pair<T, uint64_t>> local_queue;
     std::thread::id thread_id;
     //the index of last consumed item
     uint64_t consumed_index;
-    char padding[64 - 8 - sizeof(std::deque<T>) - sizeof(std::thread::id) - 8];
+    //char padding[64 - 8 - sizeof(std::deque<T>) - sizeof(std::thread::id) - 8];
     tbb::concurrent_queue<std::pair<T, uint64_t>> concurrent_queue;
 public:
     explicit locally_queue(std::thread::id local_thread_id, size_t initial_size) :
@@ -30,22 +30,22 @@ public:
     void push(const T &source) {
         uint64_t l_index = index.fetch_add(1);
         if (std::this_thread::get_id() == thread_id) {
-            local_queue.push_back(std::make_pair<T, uint64_t>(source, index));
+            local_queue.emplace_back(source, l_index);
         } else {
-            queue.push(std::make_pair<T, uint64_t>(source, index));
+            concurrent_queue.emplace(source, l_index);
         }
     }
 
     void push(T &&source) {
         uint64_t l_index = index.fetch_add(1);
         if (std::this_thread::get_id() == thread_id) {
-            local_queue.emplace_back(source, index);
+            local_queue.emplace_back(source, l_index);
         } else {
-            queue.push(std::move(std::make_pair<T, uint64_t>(std::move(source), std::move(index))));
+            concurrent_queue.emplace(std::move(source), l_index);
         }
     }
 
-    bool try_pop(T &destination) throw {
+    bool try_pop(T &destination) {
         if (std::this_thread::get_id() != thread_id) {
             std::stringstream ss;
             ss << "Try to pop value of locally_queue in thread " << std::this_thread::get_id() <<
@@ -63,15 +63,16 @@ public:
             }
             std::pair<T, uint64_t> item;
             int loop_time = 0;
-            bool succ = false;
+            bool success = false;
             bool loop = ((consumed_index+1) < index.load(std::memory_order_relaxed));
             do {
-                succ = concurrent_queue.try_pop(item);
-                if (succ && (item.second == consumed_index + 1)) {
+                success = concurrent_queue.try_pop(item);
+                if (success && (item.second == consumed_index + 1)) {
+                    consumed_index++;
                     return std::move(item.first);
                 }
 
-                if (succ) {
+                if (success) {
                     throw std::runtime_error("Disordered item in local queue!");
                 }
             } while (loop && loop_time++ < 10);
