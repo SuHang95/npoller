@@ -23,7 +23,7 @@ int main() {
 
     locally_cost = test_mpsc_queue(3);
 
-    std::cout << "Test mpsc_queue with thread size=" << 3 << " and queue size=" << push_size <<
+    std::cout << "https://17zipai.xyz/selfies/202001/93643.htmlTest mpsc_queue with thread size=" << 4 << " and queue size=" << push_size <<
               " with " << (locally_cost / 1000) << " milliseconds!" << std::endl;
 
     int64_t tbb_cost = test_tbb_queue(1);

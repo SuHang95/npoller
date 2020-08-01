@@ -8,18 +8,9 @@
 
 class io_buffer;
 
-#define ReadEvent ((uint8_t)0)
-#define WriteEvent ((uint8_t)1)
-
-
-/*#define WriteFlush    ((uint8_t)1)
-#define Done ((uint8_t)2)
-#define IOError ((uint8_t)3)
-#define IOClose ((uint8_t)4)*/
-
 class io_op {
 public:
-    io_op(){}
+    io_op() {}
 
     uint64_t id;
 
@@ -35,6 +26,10 @@ public:
         IOClose = 0x04
     } result;
 
+    const static int unspecified_id = -1;
+
+    const static size_t unspecified_size = -1;
+
     int io_id;
 
     //for write event,if must return true
@@ -43,9 +38,9 @@ public:
     virtual void notify(result_type result) = 0;
 
     //only used for write event;
-    virtual size_t size()=0;
+    virtual size_t size() = 0;
 
-    virtual const char* fail_message()=0;
+    virtual const char *fail_message() = 0;
 };
 
 
@@ -62,18 +57,11 @@ public:
 
     task &operator=(task &&) = delete;
 
-    virtual void notify(io_op &io,io_op::result_type result) = 0;
+    virtual void notify(io_op &io, io_op::result_type result) = 0;
 
 protected:
     int state;
 };
-
-
-
-
-
-
-
 
 
 #endif

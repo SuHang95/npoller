@@ -256,16 +256,17 @@ bool io::regist(const std::shared_ptr<io_op> &__event) {
         return false;
     }
 
-    if (__event->io_id != fd) {
+    if (__event->io_id != io_op::unspecified_id &&
+        __event->io_id != fd) {
         return false;
     }
 
-    if (__event->type == ReadEvent) {
+    if (__event->type == io_op::Read) {
         if (!readable_safe()) {
             return false;
         }
         read_list.push(__event);
-    } else if (__event->type == WriteEvent) {
+    } else if (__event->type == io_op::Write) {
         if (!writable_safe()) {
             return false;
         }
