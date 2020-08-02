@@ -76,7 +76,7 @@ protected:
 
     inline sockaddr_in make_sockaddr_in(const char *addr, int port);
 
-    inline void __close();
+    inline void internal_close();
 
     inline void prepare_close();
 
@@ -153,7 +153,7 @@ inline void tcp::set_status(tcp::tcp_status _status) {
     __status.store(_status, std::memory_order_relaxed);
 }
 
-void tcp::__close() {
+void tcp::internal_close() {
     ::close(fd);
     set_status(closed);
     set_valid(false);

@@ -17,7 +17,7 @@ std::shared_ptr<tcp> connection_pool::get_instance() {
     std::shared_ptr<tcp> pop_item;
 
     if (free_pool.try_pop(pop_item)) {
-        size.fetch_add(-1,std::memory_order_relaxed);
+        size.fetch_add(-1, std::memory_order_relaxed);
         return pop_item;
     }
 
@@ -28,4 +28,12 @@ std::shared_ptr<tcp> connection_pool::get_instance() {
     }
 
     return pop_item;
+}
+
+connection_pool::~connection_pool() {
+    std::shared_ptr<tcp> pop_item;
+
+    while (free_pool.try_pop(pop_item)) {
+        pop_item->close();
+    }
 }

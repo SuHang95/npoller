@@ -69,7 +69,7 @@ void tcp::connect(const char *__addr, unsigned short int __port) {
         } else if (errno == ECONNREFUSED) {
             log.error("The socket %d try to connect %s:%d,"\
                     "No one listening in the remote address!", fd, __addr, __port);
-            __close();
+            internal_close();
         } else if (errno == EALREADY) {
             set_status(connecting);
         } else if (errno == EISCONN) {
@@ -80,11 +80,11 @@ void tcp::connect(const char *__addr, unsigned short int __port) {
             support_epollrdhup = true;
         } else if (errno == ENETUNREACH) {
             log.error("Network is unreachable!");
-            tcp::__close();
+            tcp::internal_close();
         } else {
             log.error("Try connect the %s:%d,some error occur %s!", \
                     __addr, port, strerror(errno));
-            tcp::__close();
+            tcp::internal_close();
         }
     } else {
         set_status(connected);
@@ -135,7 +135,7 @@ void tcp::close() {
     set_manager(nullptr);
 
     if (valid_unsafe())
-        this->tcp::__close();
+        this->tcp::internal_close();
 }
 
 bool tcp::process_event(::epoll_event &ev) {
@@ -218,28 +218,9 @@ bool tcp::process_event(::epoll_event &ev) {
         process_write();
     }
 
-    if (readable_unsafe() == 0 && writable_unsafe() == 0) {
-        if (get_manager_unsafe() != nullptr) {
-            get_manager_unsafe()->remove_io(fd);
-            set_manager(nullptr);
-        }
-        this->tcp::__close();
-        clean_read();
-        clean_write();
-        log.debug("We have clean the event list from %d and close it!", fd);
-        return false;
-    }
-
-
-    if (status_unsafe() == peer_shutdown_write || readable_unsafe() == 0) {
-        if (get_manager_unsafe() != nullptr) {
-            get_manager_unsafe()->remove_io(fd);
-            set_manager(nullptr);
-        }
-        this->tcp::__close();
-        clean_read();
-        clean_write();
-        log.debug("We have clean the event list from %d and close it!", fd);
+    if ((readable_unsafe() == 0 && writable_unsafe() == 0) ||
+        (status_unsafe() == peer_shutdown_write || readable_unsafe() == 0)) {
+        close();
         return false;
     }
 
@@ -285,17 +266,12 @@ bool tcp::get_event(epoll_event &ev) {
             get_manager_unsafe()->remove_io(fd);
             set_manager(nullptr);
         }
-        this->tcp::__close();
-        this->process_read();
-        this->process_write();
+        this->tcp::close();
 
         return false;
     } else {
-        if (get_manager_unsafe() != nullptr) {
-            get_manager_unsafe()->remove_io(fd);
-            set_manager(nullptr);
-        }
-        this->tcp::__close();
+        set_manager(nullptr);
+        this->tcp::internal_close();
         return false;
     }
 
@@ -366,7 +342,7 @@ void tcp::direct_read() {
                 get_manager_unsafe == nullptr;
                 is_managed = 0;
             }
-            this->tcp::__close();
+            this->tcp::internal_close();
         }
     }*/
 }

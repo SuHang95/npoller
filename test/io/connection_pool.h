@@ -18,6 +18,8 @@ public:
 
     std::shared_ptr<tcp> get_instance();
 
+    virtual ~connection_pool();
+    
 private:
     tbb::concurrent_queue<std::shared_ptr<tcp>> free_pool;
 

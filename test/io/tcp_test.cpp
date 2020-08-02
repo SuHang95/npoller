@@ -6,6 +6,7 @@
 #include <netinet/in.h>
 #include <io/event_processor.h>
 #include <io/io_factory.h>
+#include "connection_pool.h"
 
 unsigned short l_port = 9010;
 
@@ -65,7 +66,8 @@ int main() {
 
 void accept_test() {
     logger log("acceptLog", logger::DEBUG, true);
-    event_processor processor(log);
+    event_processor processor1(log),processor2(log);
+    connection_pool pool1,pool2;
 
     int listen_fd = socket(AF_INET, SOCK_STREAM, 0);
     sockaddr_in address;
@@ -95,7 +97,7 @@ void accept_test() {
         };
 
         int fd = ::accept(listen_fd, (sockaddr *) &in_addr, &len);
-        processor.get_factory().create_io_with_callback<tcp>(callback, 1, type, processor.get_logger());
+        processor1.get_factory().create_io_with_callback<tcp>(callback, 1, type, processor1.get_logger());
     }
 }
 
