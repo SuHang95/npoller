@@ -89,13 +89,13 @@ protected:
 
     //these unsafe load method was load the value which not used with atomic operation,
     //these methods must only used in the method which only run on the thread manager's event loop run on
-    bool valid_unsafe();
+    virtual bool valid_unsafe();
 
-    bool readable_unsafe();
+    virtual bool readable_unsafe();
 
-    bool writable_unsafe();
+    virtual bool writable_unsafe();
 
-    bool write_busy_unsafe();
+    virtual bool write_busy_unsafe();
 
     event_processor *get_manager_safe();
 
@@ -107,15 +107,15 @@ protected:
 
     bool write_busy_safe();
 
-    void set_valid(bool);
+    virtual void set_valid(bool);
 
-    void set_readable(bool);
+    virtual void set_readable(bool);
 
-    void set_writable(bool);
+    virtual void set_writable(bool);
 
-    void set_write_busy(bool);
+    virtual void set_write_busy(bool);
 
-    void mark_invalid();
+    virtual void mark_invalid();
 
     inline bool compare_status(unsigned char _read, unsigned char _write,
                                unsigned _support_epollrdhup, unsigned char _busy) {

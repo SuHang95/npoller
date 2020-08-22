@@ -3,6 +3,12 @@
 
 tcp::tcp(const this_is_private &p, int _fd, tcp_status _status, const logger &_log) :
         io(this_is_private(0), _fd, get_io_type(_status), _log), __status(_status) {
+    if (fd < 0) {
+        set_valid(false);
+        log.error("Create a socket instance fail!");
+        return;
+    }
+
     if (_status == connected || _status == peer_shutdown_write || _status == shutdown_write) {
         set_addr_and_test();
     }
@@ -66,10 +72,6 @@ void tcp::connect(const char *__addr, unsigned short int __port) {
             address = other;
             port = __port;
 
-        } else if (errno == ECONNREFUSED) {
-            log.error("The socket %d try to connect %s:%d,"\
-                    "No one listening in the remote address!", fd, __addr, __port);
-            internal_close();
         } else if (errno == EALREADY) {
             set_status(connecting);
         } else if (errno == EISCONN) {
@@ -78,9 +80,6 @@ void tcp::connect(const char *__addr, unsigned short int __port) {
             set_writable(true);
             set_write_busy(true);
             support_epollrdhup = true;
-        } else if (errno == ENETUNREACH) {
-            log.error("Network is unreachable!");
-            tcp::internal_close();
         } else {
             log.error("Try connect the %s:%d,some error occur %s!", \
                     __addr, port, strerror(errno));
@@ -362,32 +361,6 @@ void tcp::direct_write() {
         }
     }
 }
-/*
-bool tcp::regist(io_op *__event) {
-    if (__event->io_id != fd || !valid_safe())
-        return false;
-    if (__event->type == ReadEvent) {
-        if (!readable_safe())
-            return false;
-
-        read_list.push(__event);
-        log.debug("Regist a read event on io %d", fd);
-
-    } else if (__event->type == WriteEvent) {
-        if (writable_unsafe == 0 && connect_status >= 4)
-            return false;
-
-        write_list.push(__event);
-
-        if (write_busy_unsafe == 0 && is_managed != 0 && get_manager_unsafe != nullptr && connect_status >= 2) {
-            get_manager_unsafe->add_write_instant_task(fd);
-        }
-
-
-        log.debug("Regist a write event on io %d", fd);
-    }
-    return true;
-}*/
 
 
 
