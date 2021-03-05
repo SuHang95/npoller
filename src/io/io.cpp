@@ -335,6 +335,7 @@ void io::write_flush() {
             continue;
         }
 
+        size_t before_size = this->write_buffer.size();
         if (!event->process(this->write_buffer)) {
             log.error("Some io event write fail,%s!", event->fail_message());
         }

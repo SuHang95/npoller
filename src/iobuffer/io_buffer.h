@@ -67,7 +67,6 @@ protected:
 
     struct control_block {
         std::deque<char *> _buffer;
-        std::mutex mutex_for_data;
         size_t begin;
         size_t end;
     };
@@ -92,11 +91,6 @@ private:
     inline std::deque<char *> &_buffer() {
         return block_ptr->_buffer;
     }
-
-    inline std::mutex &mutex_for_data() {
-        return block_ptr->mutex_for_data;
-    }
-
 };
 
 
