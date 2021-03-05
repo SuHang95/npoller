@@ -32,7 +32,7 @@ public:
 
     int io_id;
 
-    //for write event,if must return true
+    //for write event,it must return true
     virtual bool process(io_buffer &) = 0;
 
     virtual void notify(result_type result) = 0;

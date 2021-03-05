@@ -9,7 +9,7 @@
 io::io(const this_is_private &p, const int _fd, const io_type type, const logger &_log) :
         fd(_fd), log(_log), valid(true), manager(nullptr) {
     if (_fd < 0) {
-        log.error("Wrong param to construct io instance!");
+        log.error("Wrong param %d to construct io instance!"._fd);
         mark_invalid();
         return;
     }

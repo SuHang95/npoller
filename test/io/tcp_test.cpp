@@ -93,7 +93,7 @@ void accept_test() {
         type.readable = 0;
 
         std::function<void(std::shared_ptr<tcp>)> callback = [=](std::shared_ptr<tcp> io_ptr) {
-
+            (*io_ptr).regist()
         };
 
         int fd = ::accept(listen_fd, (sockaddr *) &in_addr, &len);
