@@ -102,9 +102,9 @@ template<typename... _Args>
 std::future<std::shared_ptr<tcp>>
 io_factory::create_tcp_async(const char *addr, unsigned short int port, _Args &&... args) {
 
-    std::promise<std::shared_ptr<tcp>> connect_promise;
-    std::future<std::shared_ptr<tcp>> connect_future = connect_promise.get_future();
-
+    std::shared_ptr<std::promise<std::shared_ptr<tcp>>> connect_promise =
+            std::make_shared<std::promise<std::shared_ptr<tcp>>>();
+    std::future<std::shared_ptr<tcp>> connect_future = connect_promise->get_future();
 
     std::packaged_task<std::shared_ptr<tcp>(bool)> *connected_handler =
             new std::packaged_task<std::shared_ptr<tcp>(bool)>(
@@ -119,7 +119,7 @@ io_factory::create_tcp_async(const char *addr, unsigned short int port, _Args &&
             std::make_shared<std::packaged_task<void()>>(
                     [=]() mutable {
                         std::shared_ptr<tcp> tcp_instance = create_io_in_eventloop(std::forward<_Args>(args)...);
-                        connect_promise.set_value(tcp_instance);
+
                         tcp_instance->set_connected_handler(connected_handler);
                         tcp_instance->connect(addr, port);
                     });
