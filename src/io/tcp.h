@@ -31,8 +31,8 @@ public:
 
     tcp(const this_is_private &, const logger &_log, in_addr_t addr = INADDR_ANY, unsigned short int port = 0);
 
-    //regist the event
-    //virtual bool regist(io_op *);
+    //register the event
+    //virtual bool register(io_op *);
 
     void close();
 
@@ -57,6 +57,8 @@ protected:
     virtual void direct_read();
 
     virtual void direct_write();
+
+    inline void handle_connect_result(bool is_connected);
 
     void reconnect();
 
@@ -112,20 +114,11 @@ inline io::io_type tcp::get_io_type(tcp_status _status) {
         case initializing:
         case connecting:
         case connected:
-            _type.readable = 1;
-            _type.writable = 1;
-            _type.support_epollrdhup = 1;
-            return _type;
+            return io_type{0x01, 0x01};
         case peer_shutdown_write:
-            _type.readable = 0;
-            _type.writable = 1;
-            _type.support_epollrdhup = 0;
-            return _type;
+            return io_type{0, 0x01};
         case shutdown_write:
-            _type.readable = 1;
-            _type.writable = 0;
-            _type.support_epollrdhup = 1;
-            return _type;
+            return io_type{0x01, 0};
     }
 }
 
@@ -171,4 +164,11 @@ inline void tcp::set_connected_handler(std::packaged_task<std::shared_ptr<tcp>(b
     this->connected_handler = handler;
 }
 
+inline void tcp::handle_connect_result(bool is_connected) {
+    if (connected_handler != nullptr) {
+        (*connected_handler)(is_connected);
+        delete connected_handler;
+        connected_handler = nullptr;
+    }
+}
 #endif

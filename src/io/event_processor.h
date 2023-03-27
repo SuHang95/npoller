@@ -70,6 +70,8 @@ public:
 
     io_factory get_factory();
 
+    std::thread::id thread_id() const;
+
 protected:
     void init();
 
@@ -78,8 +80,6 @@ protected:
     void close();
 
     void notify_event();
-
-    std::thread::id thread_id() const;
 
     //file descriptor
     const int epfd;

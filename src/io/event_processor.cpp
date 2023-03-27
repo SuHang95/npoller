@@ -138,7 +138,7 @@ bool event_processor::add_io(std::shared_ptr<io> _io) throw() {
         }
     } else {
         io_map.insert(std::make_pair(fd, _io));
-        _io->set_manager(this);
+        _io->update_manager(this);
         log.debug("Add a file descriptor %d in epoll instance %d", fd, epfd);
     }
     return true;
@@ -180,7 +180,7 @@ bool event_processor::remove_io(int fd) {
 
     if (epoll_ctl(epfd, EPOLL_CTL_DEL, fd, NULL) == -1) {
         log.error("Try to delete an io instance %d from "\
-                "Epoll instance %d,some error occur!", fd, epfd);
+                "epoll instance %d,some error occur!", fd, epfd);
         return false;
     }
 

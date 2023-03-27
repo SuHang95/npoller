@@ -6,9 +6,10 @@
 #include "event_processor.h"
 
 
-io::io(const this_is_private &p, const int _fd, const io_type type, const logger &_log) :
-        fd(_fd), log(_log), valid(true), manager(nullptr) {
-
+io::io(const this_is_private &p, const int _fd, io_type type,
+       bool _support_epollrdhup, const logger &_log) :
+        fd(_fd), log(_log), valid(true), manager(nullptr),
+        support_epollrdhup(_support_epollrdhup) {
     int ret = fcntl(fd, F_SETFL, O_NONBLOCK);
 
     have_write = 0;
@@ -22,7 +23,6 @@ io::io(const this_is_private &p, const int _fd, const io_type type, const logger
     } else {
         set_readable(type.readable == 1);
         set_writable(type.writable == 1);
-        support_epollrdhup = (type.support_epollrdhup == 1);
     }
 }
 
@@ -34,7 +34,7 @@ io::~io() {
 }
 
 
-void io::set_manager(event_processor *__manager) {
+void io::update_manager(event_processor *__manager) {
     if (get_manager_unsafe() != nullptr) {
         get_manager_unsafe()->remove_io(fd);
     }
@@ -42,7 +42,7 @@ void io::set_manager(event_processor *__manager) {
 }
 
 void io::mark_invalid() {
-    set_manager(nullptr);
+    update_manager(nullptr);
     set_valid(false);
 }
 
@@ -196,7 +196,7 @@ void io::direct_write() {
     int retry_times = 0;
     unsigned int write_sum = 0;
 
-    while (1) {
+    while (true) {
         if ((write_buffer.begin()) != -1 && (write_buffer.end()) && ((write_buffer.begin()) != (write_buffer.end()))) {
             //if begin and end is in one block,the bytes can be write is size,other is the left size in first block
             can_write_bytes = ((write_buffer.end() / DEFAULT_SIZE) == ((write_buffer.begin() / DEFAULT_SIZE)) ? \
@@ -231,7 +231,7 @@ void io::direct_write() {
             } else if (ret == 0) {
                 break;
             } else {
-                log.error("Write %zd bytes from file descriptor %d fail!");
+                log.error("Write %zd bytes from file descriptor %d fail!", write_sum, fd);
                 break;
             }
         } else {
@@ -251,7 +251,7 @@ void io::direct_write() {
 }
 
 
-bool io::regist(const std::shared_ptr<io_op> &__event) {
+bool io::do_register(const std::shared_ptr<io_op> &__event) {
     if (!valid_safe() || get_manager_safe() == nullptr) {
         return false;
     }

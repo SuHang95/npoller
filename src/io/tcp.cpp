@@ -2,7 +2,7 @@
 #include"event_processor.h"
 
 tcp::tcp(const this_is_private &p, int _fd, tcp_status _status, const logger &_log) :
-        io(this_is_private(0), _fd, get_io_type(_status), _log), __status(_status) {
+        io(this_is_private(0), _fd, get_io_type(_status), true, _log), __status(_status) {
     if (_status == connected || _status == peer_shutdown_write || _status == shutdown_write) {
         set_addr_and_test();
     }
@@ -45,11 +45,12 @@ tcp::tcp(const this_is_private &p, const logger &_log, in_addr_t addr, unsigned 
 
 
 void tcp::connect(const char *__addr, unsigned short int __port) {
+#ifdef _debug
+    assert(std::this_thread::get_id() == this->get_manager_safe()->thread_id());
+#endif
     sockaddr_in other = make_sockaddr_in(__addr, __port);
     socklen_t other_len = sizeof(sockaddr_in);
     int ret;
-
-    int retry_times = 0;
 
     //only if tcp is not on,we can use the connect function
     if (status() != initializing || !valid_unsafe()) {
@@ -57,6 +58,7 @@ void tcp::connect(const char *__addr, unsigned short int __port) {
     }
     ret = ::connect(fd, (sockaddr *) &other, other_len);
     if (ret < 0) {
+        //actually, most situation it will return EINPROGRESS
         if (errno == EINPROGRESS) {
             set_status(connecting);
 
@@ -76,8 +78,9 @@ void tcp::connect(const char *__addr, unsigned short int __port) {
             set_status(connected);
             set_readable(true);
             set_writable(true);
-            set_write_busy(true);
+            set_write_busy(false);
             support_epollrdhup = true;
+            handle_connect_result(true);
         } else if (errno == ENETUNREACH) {
             log.error("Network is unreachable!");
             tcp::__close();
@@ -132,7 +135,7 @@ void tcp::close() {
     clean_read();
     clean_write();
 
-    set_manager(nullptr);
+    //set_manager(nullptr);
 
     if (valid_unsafe())
         this->tcp::__close();
@@ -150,19 +153,11 @@ bool tcp::process_event(::epoll_event &ev) {
             if (status() == connecting) {
                 return get_event(ev);
             } else if (status() == connected) {
-                if (connected_handler != nullptr) {
-                    (*connected_handler)(true);
-                    delete connected_handler;
-                    connected_handler = nullptr;
-                }
+                handle_connect_result(true);
                 break;
             } else {
                 close();
-                if (connected_handler != nullptr) {
-                    (*connected_handler)(false);
-                    delete connected_handler;
-                    connected_handler = nullptr;
-                }
+                handle_connect_result(false);
                 return false;
             }
         case connected:
@@ -221,7 +216,7 @@ bool tcp::process_event(::epoll_event &ev) {
     if (readable_unsafe() == 0 && writable_unsafe() == 0) {
         if (get_manager_unsafe() != nullptr) {
             get_manager_unsafe()->remove_io(fd);
-            set_manager(nullptr);
+            //set_manager(nullptr);
         }
         this->tcp::__close();
         clean_read();
@@ -234,7 +229,7 @@ bool tcp::process_event(::epoll_event &ev) {
     if (status_unsafe() == peer_shutdown_write || readable_unsafe() == 0) {
         if (get_manager_unsafe() != nullptr) {
             get_manager_unsafe()->remove_io(fd);
-            set_manager(nullptr);
+            //set_manager(nullptr);
         }
         this->tcp::__close();
         clean_read();
@@ -283,7 +278,7 @@ bool tcp::get_event(epoll_event &ev) {
     } else if (l_status == closed) {
         if (get_manager_unsafe() != nullptr) {
             get_manager_unsafe()->remove_io(fd);
-            set_manager(nullptr);
+            //set_manager(nullptr);
         }
         this->tcp::__close();
         this->process_read();
@@ -293,7 +288,7 @@ bool tcp::get_event(epoll_event &ev) {
     } else {
         if (get_manager_unsafe() != nullptr) {
             get_manager_unsafe()->remove_io(fd);
-            set_manager(nullptr);
+            //set_manager(nullptr);
         }
         this->tcp::__close();
         return false;

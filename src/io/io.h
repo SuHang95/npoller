@@ -2,8 +2,8 @@
 // Created by suhang on 2020/1/26.
 //
 
-#ifndef NETPROCESSOR_IO_H
-#define NETPROCESSOR_IO_H
+#ifndef IO_H
+#define IO_H
 
 #include <sulog/logger.h>
 #include "task.h"
@@ -29,13 +29,17 @@ public:
     struct io_type {
         unsigned readable:1;
         unsigned writable:1;
-        unsigned support_epollrdhup:1;
     };
 
-    //the protected method is only used on event loop thread
-    io(const this_is_private &, const int _fd, const io_type, const logger &_log);
+    constexpr static io_type readable = {0x01};
+    constexpr static io_type writable = {0x02};
 
-    io(const this_is_private &, const int _fd, const io_type type) : io(this_is_private(0), _fd, type,
+    //the protected method is only used on event loop thread
+    io(const this_is_private &, const int _fd, const io_type,
+            const bool _support_epollrdhup, const logger &_log);
+
+    io(const this_is_private &, const int _fd, const io_type type,
+            const bool _support_epollrdhup) : io(this_is_private(0), _fd, type,_support_epollrdhup,
                                                                         logger("io" + std::hash<std::string>{}(
                                                                                 std::to_string(fd +
                                                                                                reinterpret_cast<size_t>(this))),
@@ -56,8 +60,8 @@ public:
                 std::to_string(fd + reinterpret_cast<size_t>(this)));
     }
 
-    //regist the event
-    virtual bool regist(const std::shared_ptr<io_op> &);
+    //register the event
+    virtual bool do_register(const std::shared_ptr<io_op> &);
 
 protected:
     io() {}
@@ -72,7 +76,7 @@ protected:
 
     virtual bool get_event(epoll_event &ev);
 
-    void set_manager(event_processor *__manager);
+    void update_manager(event_processor *__manager);
 
     virtual void process_read();
 
@@ -120,7 +124,7 @@ protected:
     inline bool compare_status(unsigned char _read, unsigned char _write,
                                unsigned _support_epollrdhup, unsigned char _busy) {
         return ((_read != readable_unsafe()) || (_write != writable_unsafe()) ||
-                (_support_epollrdhup) != support_epollrdhup || (_busy != write_busy_unsafe()));
+                (_support_epollrdhup) != _support_epollrdhup || (_busy != write_busy_unsafe()));
     }
 
 
@@ -129,14 +133,13 @@ protected:
     std::atomic<event_processor *> manager;
     //status descriptor
     std::atomic<bool> valid;
-    std::atomic<bool> readable;
-    std::atomic<bool> writable;
+    std::atomic<io_type> type;
     std::atomic<bool> write_busy;
     //file descriptor
     int fd;
     bool support_epollrdhup;
 
-    uint8_t cache_line_padding1[cache_line_size - 4 * sizeof(std::atomic<unsigned char>)
+    uint8_t cache_line_padding1[cache_line_size - 3 * sizeof(std::atomic<unsigned char>)
                                 - sizeof(std::atomic<event_processor *>) - sizeof(int)];
 
 
@@ -174,12 +177,12 @@ inline bool io::valid_unsafe() {
 
 
 inline bool io::readable_unsafe() {
-    return *(reinterpret_cast<bool *>(&readable));
+    return (reinterpret_cast<io_type *>(&type)->readable);
 }
 
 
 inline bool io::writable_unsafe() {
-    return *(reinterpret_cast<bool *>(&writable));
+    return (reinterpret_cast<io_type *>(&type)->writable);
 }
 
 
@@ -197,11 +200,11 @@ inline bool io::valid_safe() {
 }
 
 inline bool io::readable_safe() {
-    return readable.load(std::memory_order_relaxed);
+    return type.load(std::memory_order_relaxed).readable;
 }
 
 inline bool io::writable_safe() {
-    return writable.load(std::memory_order_relaxed);
+    return type.load(std::memory_order_relaxed).writable;
 }
 
 inline bool io::write_busy_safe() {
@@ -214,11 +217,35 @@ inline void io::set_valid(bool _valid) {
 
 
 inline void io::set_readable(bool _readable) {
-    readable.store(_readable, std::memory_order_relaxed);
+    io_type expected_type = type.load(std::memory_order_relaxed);
+    io_type current_type;
+    bool success;
+    do {
+        current_type = expected_type;
+        if (((current_type.readable == 0x01) & _readable) ||
+            ((current_type.readable == 0x0) & !_readable)) {
+            return;
+        }
+        current_type.readable = _readable ? 0x01 : 0;
+        success = type.compare_exchange_strong(expected_type,current_type,std::memory_order_relaxed
+                ,std::memory_order_relaxed);
+    } while (!success);
 }
 
-inline void io::set_writable(bool _writable) {
-    writable.store(_writable, std::memory_order_relaxed);
+inline void io::set_writable(bool _writable){
+    io_type expected_type = type.load(std::memory_order_relaxed);
+    io_type current_type;
+    bool success;
+    do {
+        current_type = expected_type;
+        if (((current_type.writable== 0x01) & _writable) ||
+            ((current_type.writable == 0x0) & !_writable)) {
+            return;
+        }
+        current_type.writable = _writable ? 0x01 : 0;
+        success = type.compare_exchange_strong(expected_type,current_type,std::memory_order_relaxed
+                ,std::memory_order_relaxed);
+    } while (!success);
 }
 
 inline void io::set_write_busy(bool _write_busy) {
@@ -226,4 +253,4 @@ inline void io::set_write_busy(bool _write_busy) {
 }
 
 
-#endif //NETPROCESSOR_IO_H
+#endif //IO_H

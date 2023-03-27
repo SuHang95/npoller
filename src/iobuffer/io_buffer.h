@@ -75,7 +75,7 @@ protected:
     std::shared_ptr<control_block> block_ptr;
 
 
-#ifdef NETPROCESSOR_IO_H
+#ifdef IO_H
     friend class io;
     friend class tcp;
 #endif
