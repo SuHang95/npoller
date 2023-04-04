@@ -13,4 +13,16 @@ logger::internal_logger::~internal_logger(){
     this->simple_logger::~simple_logger();
 }
 
+logger::internal_logger::internal_logger(const std::string &name, logger::log_level level, bool sync,
+                                         log_time_strategy name_strategy, log_time_strategy log_strategy)
+        : simple_logger() {
+    std::unique_lock<std::mutex> _g(this->_mutex);
 
+    this->name = name;
+    this->name_strategy = name_strategy;
+    this->log_strategy = log_strategy;
+    this->is_sync = sync;
+    this->level = level;
+
+    open_file();
+}

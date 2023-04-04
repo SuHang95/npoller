@@ -11,6 +11,7 @@
 #include <atomic>
 #include <cstring>
 #include <memory>
+#include <iostream>
 
 class simple_logger : base_logger {
 public:
@@ -174,6 +175,7 @@ bool simple_logger::vfprintf(int length, const char *format, va_list args) {
     if (is_sync) {
         succ &= (::fflush(fp) == EOF);
     }
+    std::cout<< errno <<std::endl;
     return succ;
 }
 

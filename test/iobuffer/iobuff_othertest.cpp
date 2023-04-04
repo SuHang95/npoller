@@ -1,6 +1,7 @@
 #include <iobuffer/io_buffer.h>
 #include <random>
 #include <sulog/logger.h>
+#include <array>
 
 #define test_buff_size 69128
 #define array_size 20

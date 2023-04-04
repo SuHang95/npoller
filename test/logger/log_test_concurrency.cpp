@@ -42,16 +42,16 @@ int main() {
     }
 
     std::vector<std::thread> threads;
-    for (int j = 0; j < 4; ++j) {
+    /*for (int j = 0; j < 8; ++j) {
         threads.emplace_back(swap_test, &test_array, j);
     }
 
     for (auto &thread:threads) {
         thread.join();
-    }
+    }*/
 
     std::vector<std::thread> log_threads;
-    for (int j = 0; j < 4; ++j) {
+    for (int j = 0; j < 8; ++j) {
         log_threads.emplace_back(log_test, &test_array, j);
     }
 

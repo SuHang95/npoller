@@ -43,9 +43,9 @@ public:
 private:
     class internal_logger : public simple_logger {
     public:
-        explicit inline internal_logger(const std::string &name, logger::log_level level, bool sync = false,
-                                        log_time_strategy name_strategy = day,
-                                        log_time_strategy log_strategy = millisecond);
+        explicit internal_logger(const std::string &name, logger::log_level level, bool sync = false,
+                                 log_time_strategy name_strategy = day,
+                                 log_time_strategy log_strategy = millisecond);
 
         inline explicit internal_logger() : simple_logger() {}
 
@@ -138,18 +138,7 @@ void logger::internal_logger::print(const char *level, const std::string &text) 
     return simple_logger::print(level, text);
 }
 
-logger::internal_logger::internal_logger(const std::string &name, logger::log_level level, bool sync,
-                                         log_time_strategy name_strategy, log_time_strategy log_strategy) {
-    std::unique_lock<std::mutex> _g(this->_mutex);
 
-    this->name = name;
-    this->name_strategy = name_strategy;
-    this->log_strategy = log_strategy;
-    this->is_sync = sync;
-    this->level = level;
-
-    open_file();
-}
 
 logger::logger(const std::string &name, log_level level, bool sync,
                log_time_strategy name_strategy, log_time_strategy log_strategy) :
@@ -178,6 +167,7 @@ logger &logger::operator=(const logger &that) {
             this->log = that.log;
         }
     }
+    return *this;
 }
 
 void logger::debug(const char *format, ...) {
@@ -229,7 +219,8 @@ bool logger::is_debug_enable() const {
     return log->is_debug_enable();
 }
 
-inline std::string logger::time(log_time_strategy strategy){
+inline std::string logger::time(log_time_strategy strategy) {
     return log->time(strategy);
 }
+
 #endif
