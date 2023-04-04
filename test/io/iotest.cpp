@@ -45,13 +45,10 @@ public:
     void run() {
         if (state == 0) {
             io::io_type type;
-            type.support_epollrdhup = 0;
-            type.writable = 1;
-            type.readable = 0;
 
             std::function<void(std::shared_ptr<io>)> callback = [=](std::shared_ptr<io> ptr) {
                 log.info("Get io instance, which id is:%d", ptr->id());
-                if (ptr != nullptr && ptr->regist(std::dynamic_pointer_cast<io_op>(op))) {
+                if (ptr != nullptr && ptr->do_register(std::dynamic_pointer_cast<io_op>(op))) {
                     this->state = 1;
                 } else {
                     this->state = 2;
@@ -64,7 +61,7 @@ public:
             callback(out);*/
 
             //callback mode
-            processor.get_factory().create_io_with_callback<io>(callback, 1, type, processor.get_logger());
+            processor.get_factory().create_io_with_callback<io>(callback, 1, io::writable,false, processor.get_logger());
 
             return;
         }

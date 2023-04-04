@@ -19,6 +19,8 @@ public:
 
     inline logger &operator=(const logger &);
 
+    std::string time(log_time_strategy);
+
 
     virtual inline void error(const char *format, ...) final;
 
@@ -47,7 +49,7 @@ private:
 
         inline explicit internal_logger() : simple_logger() {}
 
-        virtual ~internal_logger() {};
+        virtual ~internal_logger();
 
     private:
         std::mutex _mutex;
@@ -227,4 +229,7 @@ bool logger::is_debug_enable() const {
     return log->is_debug_enable();
 }
 
+inline std::string logger::time(log_time_strategy strategy){
+    return log->time(strategy);
+}
 #endif

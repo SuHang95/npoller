@@ -9,23 +9,27 @@ add_executable(buffer_test
         buffer_test.cpp
         ${MODULE_SOURCE_DIR}/io_buffer.cpp
         ${SPIN_LOCK_DIR}/spin_lock.cpp
-        ${LOGGER_DIR}/simple_logger.cpp)
+        ${LOGGER_DIR}/simple_logger.cpp
+        ${LOGGER_DIR}/logger.cpp)
 
 add_executable(iobuff_selftest
         ${MODULE_SOURCE_DIR}/io_buffer.cpp
         ${SPIN_LOCK_DIR}/spin_lock.cpp
         iobuff_selftest.cpp
-        ${LOGGER_DIR}/simple_logger.cpp)
+        ${LOGGER_DIR}/simple_logger.cpp
+        ${LOGGER_DIR}/logger.cpp)
 add_executable(iobuff_selftest1
         ${MODULE_SOURCE_DIR}/io_buffer.cpp
         ${SPIN_LOCK_DIR}/spin_lock.cpp
         iobuff_selftest1.cpp
-        ${LOGGER_DIR}/simple_logger.cpp)
+        ${LOGGER_DIR}/simple_logger.cpp
+        ${LOGGER_DIR}/logger.cpp)
 add_executable(iobuff_othertest
         ${MODULE_SOURCE_DIR}/io_buffer.cpp
         ${SPIN_LOCK_DIR}/spin_lock.cpp
         iobuff_othertest.cpp
-        ${LOGGER_DIR}/simple_logger.cpp)
+        ${LOGGER_DIR}/simple_logger.cpp
+        ${LOGGER_DIR}/logger.cpp)
 
 #add_executable(concurrent_buffer_test
 #        ${MODULE_SOURCE_DIR}/concurrent_buffer.cpp

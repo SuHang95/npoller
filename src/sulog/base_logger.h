@@ -5,6 +5,8 @@
 #ifndef NETPROCESSOR_BASE_LOGGER_H
 #define NETPROCESSOR_BASE_LOGGER_H
 
+#include <ctime>
+
 enum log_time_strategy {
     no = 0,
     month = 10,

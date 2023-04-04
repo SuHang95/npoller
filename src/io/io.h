@@ -31,8 +31,8 @@ public:
         unsigned writable:1;
     };
 
-    constexpr static io_type readable = {0x01};
-    constexpr static io_type writable = {0x02};
+    constexpr static io_type readable = {1,0};
+    constexpr static io_type writable = {0,1};
 
     //the protected method is only used on event loop thread
     io(const this_is_private &, const int _fd, const io_type,

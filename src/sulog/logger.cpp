@@ -12,3 +12,5 @@ logger::internal_logger::~internal_logger(){
     std::unique_lock<std::mutex> _g(this->_mutex);
     this->simple_logger::~simple_logger();
 }
+
+

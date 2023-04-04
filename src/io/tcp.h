@@ -52,8 +52,6 @@ protected:
 
     virtual bool get_event(epoll_event &ev);
 
-    virtual void process_read();
-
     virtual void direct_read();
 
     virtual void direct_write();
@@ -119,6 +117,8 @@ inline io::io_type tcp::get_io_type(tcp_status _status) {
             return io_type{0, 0x01};
         case shutdown_write:
             return io_type{0x01, 0};
+        default:
+            return io_type{0, 0};
     }
 }
 
