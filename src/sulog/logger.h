@@ -40,6 +40,16 @@ public:
 
     virtual inline bool is_debug_enable() const;
 
+#ifdef _DEBUG
+
+    inline std::string name() {
+        return log->name;
+    }
+
+    friend void swap(logger &first, logger &second);
+
+#endif
+
 private:
     class internal_logger : public simple_logger {
     public:
@@ -139,7 +149,6 @@ void logger::internal_logger::print(const char *level, const std::string &text) 
 }
 
 
-
 logger::logger(const std::string &name, log_level level, bool sync,
                log_time_strategy name_strategy, log_time_strategy log_strategy) :
         log(std::make_shared<internal_logger>(name, level, sync,
@@ -156,14 +165,13 @@ logger &logger::operator=(const logger &that) {
     if (this == &that) {
         return *this;
     }
-
-    const logger *first = this < &that ? this : &that;
-    const logger *second = this > &that ? this : &that;
+    logger *first = (this < (&that)) ? this : const_cast<logger *> (&that);
+    logger *second = this > &that ? this : const_cast<logger *> (&that);
 
     {
-        std::unique_lock<reentrant_spin_lock> t(const_cast<reentrant_spin_lock &>(first->lock));
+        std::unique_lock<reentrant_spin_lock> t(first->lock);
         {
-            std::unique_lock<reentrant_spin_lock> t1(const_cast<reentrant_spin_lock &>(second->lock));
+            std::unique_lock<reentrant_spin_lock> t1(second->lock);
             this->log = that.log;
         }
     }
@@ -222,5 +230,24 @@ bool logger::is_debug_enable() const {
 inline std::string logger::time(log_time_strategy strategy) {
     return log->time(strategy);
 }
+
+#ifdef _DEBUG
+inline void swap(logger &first, logger &second) {
+    logger *logger1 = &first < &second ? &first : const_cast<logger *> (&second);
+    logger *logger2 = &first > &second ? &first : const_cast<logger *> (&second);
+
+    {
+        std::unique_lock<reentrant_spin_lock> t(logger1->lock);
+        {
+            std::unique_lock<reentrant_spin_lock> t1(logger2->lock);
+            std::swap(logger1->log,logger2->log);
+            //std::shared_ptr<logger::internal_logger> tmp = logger1->log;
+            //logger1->log = logger2->log;
+            //logger2->log = tmp;
+        }
+    }
+}
+
+#endif
 
 #endif

@@ -16,7 +16,8 @@
 class simple_logger : base_logger {
 public:
 
-    explicit simple_logger(const std::string &name, log_level level, bool sync = false, log_time_strategy name_strategy = day,
+    explicit simple_logger(const std::string &name, log_level level, bool sync = false,
+                           log_time_strategy name_strategy = day,
                            log_time_strategy log_strategy = millisecond);
 
     inline explicit simple_logger();
@@ -67,7 +68,7 @@ public:
 
     inline void debug(const char *format, va_list args);
 
-    inline bool is_debug_enable() const{
+    inline bool is_debug_enable() const {
         return level <= DEBUG;
     }
 
@@ -77,6 +78,7 @@ protected:
     enum file_state {
         open,   //文件处于打开状态，fp指针有效
         non_associated,  //fp指针无效，不关联任何文件描述符
+        bad_file_descriptor //需要手动关闭
     };
 
     std::atomic<file_state> state;
@@ -171,11 +173,16 @@ bool simple_logger::fprintf(int count, const char *format...) {
 }
 
 bool simple_logger::vfprintf(int length, const char *format, va_list args) {
-    bool succ = (::vfprintf(fp, format, args) >= length);
+    int ret = ::vfprintf(fp, format, args);
+    //we can not know how much byte we actually need write
+    bool succ = (ret > 0);
+
     if (is_sync) {
-        succ &= (::fflush(fp) == EOF);
+        succ &= (::fflush(fp) == 0);
     }
-    std::cout<< errno <<std::endl;
+    if (errno == EBADF) {
+        this->set_file_state(bad_file_descriptor);
+    }
     return succ;
 }
 

@@ -8,3 +8,7 @@ add_subdirectory(spinlock)
 add_subdirectory(logger)
 ##add_subdirectory(lockfree)
 
+
+if(CMAKE_COMPILER_IS_GNUCXX)
+    add_compile_options(-D _DEBUG)
+endif(CMAKE_COMPILER_IS_GNUCXX)

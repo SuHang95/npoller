@@ -20,7 +20,7 @@ simple_logger::simple_logger(const std::string &name, log_level level, bool sync
 };
 
 simple_logger::~simple_logger() {
-    fclose();
+    simple_logger::fclose();
 }
 
 
@@ -67,9 +67,9 @@ void simple_logger::print(const char *level, const char *format, va_list args) {
                                      stack_addr, use_stack_addr, fmt_str_len);
         write_success = vfprintf(fmt_str_len, new_fmt_str, args);
 
-        if (is_sync) {
-            write_success &= (::fflush(fp) == EOF);
-        }
+        /*if (is_sync) {
+            write_success &= (::fflush(fp) == 0);
+        }*/
     }
 
     if (!write_success) {
@@ -92,11 +92,12 @@ void simple_logger::print(const char *level, const std::string &text) {
     if (load_file_state() == open) {
         count += ::fprintf(fp, "%s%s%s\n", time_str.c_str(), level, text.c_str());
 
+        //TODO Pay attention on this
         write_success &= (count >=
                           time_str.length() + strlen(level) + text.length() + 1);
 
         if (is_sync) {
-            write_success &= (::fflush(fp) == EOF);
+            write_success &= (::fflush(fp) == 0);
         }
 
     }
@@ -108,7 +109,7 @@ void simple_logger::print(const char *level, const std::string &text) {
 
 
 void simple_logger::reopen_if_need(bool need_reopen) {
-    if (need_reopen || load_file_state() == non_associated) {
+    if (need_reopen || load_file_state() != file_state::open) {
         if (fp != NULL) {
             ::fclose(fp);
         }
