@@ -83,22 +83,40 @@ public:
         }
 
         bool add_waitor(std::coroutine_handle<> h) {
-            std::lock_guard<std::mutex> lck(mutex_);
-            if (!finish_) {
-                waiters.push_back(h);
-                return true;
+            if (finish_.load(std::memory_order_relaxed)) {
+                return false;
+            }
+            int retry_times = 0;
+            {
+                do {
+                    if (!mutex_.try_lock()) {
+                        if (finish_.load(std::memory_order_relaxed)) {
+                            return false;
+                        }
+                        continue;
+                    }
+                    //try lock success
+                    //this logic is same to double-check singleton
+                    if (!finish_.load(std::memory_order_relaxed)) {
+                        waiters.push_back(h);
+                        mutex_.unlock();
+                        return true;
+                    }
+                    mutex_.unlock();
+                    return false;
+                } while (retry_times++ < 3);
             }
             return false;
         }
 
         void resume_all_waitor(bool finish) {
             std::lock_guard<std::mutex> lck(mutex_);
+            if (finish) {
+                finish_.store(finish, std::memory_order_relaxed);
+            }
             while (!waiters.empty()) {
                 waiters.front().resume();
                 waiters.pop_front();
-            }
-            if (finish) {
-                finish_ = true;
             }
         }
 
@@ -130,8 +148,8 @@ public:
     }
 
     T operator()() {
-        if (future_.wait_for(std::chrono::seconds(5)) != std::future_status::ready) {
-            std::cout << "IMPORTANT PROBLEM!" << std::endl;
+        if (future_.wait_for(std::chrono::seconds(0)) != std::future_status::ready) {
+            std::cout << "Bad situation2!" << std::endl;
         }
         return future_.get();
     }
@@ -244,7 +262,7 @@ public:
     public:
         enque_awaitable(std::future<coroutine_task<T>> &&_future, std::shared_ptr<execute_callback<T>> callback,
                         coroutine_pool *pool)
-                : future_(std::move(_future)), callback_(callback), pool_(pool), good_(false) {}
+                : future_(std::move(_future)), callback_(callback), pool_(pool) {}
 
         enque_awaitable(const enque_awaitable &) = delete;
 
@@ -276,14 +294,10 @@ public:
                 return_value = std::move(future_.get());
             }
             bool done = return_value.value().done();
-            if (done) {
-                pool_->good_count.fetch_add(1);
-                good_ = true;
-            }
             return done;
         }
 
-        void await_suspend(std::coroutine_handle<> h) {
+        bool await_suspend(std::coroutine_handle<> h) {
             if constexpr (std::is_same<wait_timepoint, wait_with_coroutine_start>::value) {
                 return future_.
                         wait_for(std::chrono::seconds(0)) != std::future_status::ready;
@@ -298,29 +312,35 @@ public:
                 }
 
             });
-            //no matter whether coroutine we enque has completed, we can ensure the current coroutine will run
-            // if the callback set succefully
+            //no matter whether coroutine we enqueued has completed, we can ensure the current coroutine will run
+            // if the callback set successfully
             if (!callback_set) {
-                while (!await_ready()) {}
-                pool_->add_runnable(h);
+                int count = 0;
+                while (!await_ready()) {
+                    count++;
+                }
+#ifdef _DEBUG
+                if (count > 0) {
+                    pool_->bad_situation1.fetch_add(1, std::memory_order_relaxed);
+                    std::cout << "count = " << count << std::endl;
+                }
+#endif
+                return false;
             }
-            pool_->await_count.fetch_add(1);
+            return true;
         }
 
         T await_resume() {
-            /* if (future_.
-                     wait_for(std::chrono::seconds(0)) != std::future_status::ready) {
-                 std::cout << "dont ready!" << std::this_thread::get_id() << std::endl;
-                 //assert(false);
-             }*/
-            if (future_.wait_for(std::chrono::seconds(5)) != std::future_status::ready) {
-                std::cout << "IMPORTANT PROBLEM!" << std::endl;
+            if (!return_value.has_value()) {
+#ifdef _DEBUG
+                if (future_.
+                        wait_for(std::chrono::seconds(0)) != std::future_status::ready) {
+                    pool_->bad_situation.fetch_add(1);
+                }
+#endif
+                return future_.get()();
             }
-            if (good_) {
-                std::cout << "no suspend!" << std::endl;
-            }
-            pool_->resmue_count.fetch_add(1);
-            return future_.get()();
+            return return_value.value()();
         }
 
 
@@ -331,9 +351,6 @@ public:
         std::optional<coroutine_task<T>> return_value;
 
         std::shared_ptr<execute_callback<T>> callback_;
-
-        std::atomic_bool good_;
-
         //Be careful of this
         coroutine_pool *pool_;
     };
@@ -367,17 +384,16 @@ public:
     }*/
     void add_runnable(std::coroutine_handle<> h) {
         this->enqueue([h, this]() {
-            h_resume_count.fetch_add(1);
             h.resume();
         });
     }
 
 private:
     //tbb::concurrent_queue<std::coroutine_handle<>> runnable;
-    std::atomic_int64_t h_resume_count;
-    std::atomic_int64_t await_count;
-    std::atomic_int64_t resmue_count;
-    std::atomic_int64_t good_count;
+#ifdef _DEBUG
+    std::atomic_int64_t bad_situation;
+    std::atomic_int64_t bad_situation1;
+#endif
 };
 
 

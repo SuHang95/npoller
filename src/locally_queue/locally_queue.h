@@ -12,9 +12,9 @@
 #include<sstream>
 
 template<typename T>
-class locally_queue<T> {
+class locally_queue {
 private:
-    std::atomic<uint64_T> index;
+    std::atomic<uint64_t> index;
     std::deque<std::pair<T, uint64_t>> local_queue;
     std::thread::id thread_id;
     //the index of last consumed item

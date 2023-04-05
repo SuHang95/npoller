@@ -21,9 +21,9 @@ LINK_DIRECTORIES(
 
 
 if(CMAKE_COMPILER_IS_GNUCXX)
-    SET(CMAKE_CXX_COMPILER /usr/bin/g++-9)
-    #add_compile_options(-g)
-    add_compile_options(-D _DEBUG)
+    SET(CMAKE_CXX_COMPILER /usr/bin/g++)
+    add_compile_options(-O3)
+    #add_compile_options(-D _DEBUG)
 endif(CMAKE_COMPILER_IS_GNUCXX)
 find_package(Threads)
 
