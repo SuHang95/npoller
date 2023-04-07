@@ -17,7 +17,7 @@ io::io(const this_is_private &p, const int _fd, io_type type,
 
     if (ret < 0) {
         if (errno == EBADF) {
-            set_valid(false);
+            mark_invalid();
         }
         log.error("Set fd %d non-blocking error:", fd);
     } else {
@@ -44,6 +44,8 @@ void io::update_manager(event_processor *__manager) {
 void io::mark_invalid() {
     update_manager(nullptr);
     set_valid(false);
+    set_readable(false);
+    set_writable(false);
 }
 
 bool io::process_event(::epoll_event &ev) {
@@ -109,7 +111,6 @@ void io::direct_read() {
         log.debug("An invalid or can't read io was try to read!");
         return;
     }
-    std::unique_lock<std::mutex> data_lock(read_buffer.mutex_for_data());
 #ifdef _debug
     int sum=0;
 #endif
@@ -189,7 +190,6 @@ void io::direct_write() {
     if (!valid_unsafe() || !writable_unsafe()) {
         return;
     }
-    std::unique_lock<std::mutex> write_lock(write_buffer.mutex_for_data());
 
     char *write_buffer_first_block_ptr = nullptr;
     size_t can_write_bytes = 0;
@@ -256,16 +256,17 @@ bool io::do_register(const std::shared_ptr<io_op> &__event) {
         return false;
     }
 
-    if (__event->io_id != fd) {
+    if (__event->io_id != io_op::unspecified_id &&
+        __event->io_id != fd) {
         return false;
     }
 
-    if (__event->type == ReadEvent) {
+    if (__event->type == io_op::Read) {
         if (!readable_safe()) {
             return false;
         }
         read_list.push(__event);
-    } else if (__event->type == WriteEvent) {
+    } else if (__event->type == io_op::Write) {
         if (!writable_safe()) {
             return false;
         }
@@ -328,6 +329,7 @@ void io::write_flush() {
             continue;
         }
 
+        size_t before_size = this->write_buffer.size();
         if (!event->process(this->write_buffer)) {
             log.error("Some io event write fail,%s!", event->fail_message());
         }

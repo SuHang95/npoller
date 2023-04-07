@@ -61,7 +61,8 @@ public:
             callback(out);*/
 
             //callback mode
-            processor.get_factory().create_io_with_callback<io>(callback, 1, io::writable,false, processor.get_logger());
+            processor.get_factory().create_io_with_callback<io>(callback, 1, io::writable, false,
+                                                                processor.get_logger());
 
             return;
         }

@@ -101,7 +101,6 @@ std::shared_ptr<_Tp> io_factory::create_io(_Args &&... __args) {
 template<typename... _Args>
 std::future<std::shared_ptr<tcp>>
 io_factory::create_tcp_async(const char *addr, unsigned short int port, _Args &&... args) {
-
     std::promise<std::shared_ptr<tcp>> connect_promise;
 
     //this future is for connected_handler use, not return value
@@ -126,7 +125,7 @@ io_factory::create_tcp_async(const char *addr, unsigned short int port, _Args &&
                     [=]() mutable {
                         std::shared_ptr<tcp> tcp_instance = create_io_in_eventloop(std::forward<_Args>(args)...);
                         connect_promise.set_value(tcp_instance);
-                        //this handler must not shared_ptr,other wise it will cause circular reference
+                        //this handler must not shared_ptr,otherwise it will cause circular reference
                         tcp_instance->set_connected_handler(connected_handler);
                         tcp_instance->connect(addr, port);
                     });

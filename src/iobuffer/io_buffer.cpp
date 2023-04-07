@@ -6,13 +6,12 @@ mem_container io_buffer::mem(0x40000000);
 
 
 io_buffer::io_buffer() :
-        block_ptr(std::make_shared<control_block>()) {
+    block_ptr(std::make_shared<control_block>()) {
     block_ptr->begin = -1;
     block_ptr->end = 0;
 }
 
 void io_buffer::push_back_n(const char *src, size_t size) {
-    std::unique_lock<std::mutex> protect(block_ptr->mutex_for_data);
     check();
     if (size == 0 || src == NULL) {
         return;
@@ -23,8 +22,6 @@ void io_buffer::push_back_n(const char *src, size_t size) {
     std::deque<char *> &_buffer = block_ptr->_buffer;
 
     if (begin == (size_t) -1) {
-        /*如果buffer为空，因为size不为0，所以现在把begin置0，为确保end正常，
-        也置0，但这事实上是一个不太正常的状态，需要注意*/
         begin = 0;
         end = 0;
     }
@@ -44,8 +41,6 @@ void io_buffer::push_back_n(const char *src, size_t size) {
 }
 
 void io_buffer::pop_back_n(size_t size) {
-    std::lock_guard<std::mutex> protect(block_ptr->mutex_for_data);
-
     check();
     size_t &begin = block_ptr->begin;
     size_t &end = block_ptr->end;
@@ -54,7 +49,6 @@ void io_buffer::pop_back_n(size_t size) {
 
     if (begin == (size_t) -1)
         return;
-        //注意，end-begin是队列现在实际的size
     else if (size > end - begin) {
         begin = (size_t) -1;
         end = 0;
@@ -72,7 +66,6 @@ size_t io_buffer::pop_back_n(char *dest, size_t size) {
     size_t &end = block_ptr->end;
     std::deque<char *> &_buffer = block_ptr->_buffer;
 
-    std::lock_guard<std::mutex> protect(block_ptr->mutex_for_data);
     if ((begin == (size_t) -1) && (begin >= end)) {
         begin = -1;
         end = 0;
@@ -109,8 +102,6 @@ size_t io_buffer::pop_back_n(char *dest, size_t size) {
 }
 
 void io_buffer::pop_front_n(size_t size) {
-    std::lock_guard<std::mutex> protect(block_ptr->mutex_for_data);
-
     check();
     size_t &begin = block_ptr->begin;
     size_t &end = block_ptr->end;
@@ -164,7 +155,6 @@ size_t io_buffer::pop_front_n(char *dest, size_t size) {
 
 
 void io_buffer::push_front_n(const char *src, size_t size) {
-    std::lock_guard<std::mutex> protect(block_ptr->mutex_for_data);
     if (size == 0 || src == nullptr) {
         return;
     }
@@ -211,7 +201,6 @@ char io_buffer::get(size_t n) {
     size_t &end = block_ptr->end;
     std::deque<char *> &_buffer = block_ptr->_buffer;
 
-    std::lock_guard<std::mutex> protect(block_ptr->mutex_for_data);
     if (n >= (end - begin) || begin == (size_t) -1) {
         throw std::logic_error("index out of bounds!");
     } else {
@@ -226,7 +215,6 @@ size_t io_buffer::get_n(size_t n, char *dest, size_t size) {
     size_t &end = block_ptr->end;
     std::deque<char *> &_buffer = block_ptr->_buffer;
 
-    std::lock_guard<std::mutex> protect(block_ptr->mutex_for_data);
     if ((begin == (size_t) -1) && (begin >= end)) {
         begin = -1;
         end = 0;
@@ -249,8 +237,6 @@ size_t io_buffer::get_n(size_t n, char *dest, size_t size) {
 }
 
 void io_buffer::set(size_t n, char a) {
-    std::lock_guard<std::mutex> protect(block_ptr->mutex_for_data);
-
     size_t &begin = block_ptr->begin;
     size_t &end = block_ptr->end;
     std::deque<char *> &_buffer = block_ptr->_buffer;
@@ -263,12 +249,10 @@ void io_buffer::set(size_t n, char a) {
 }
 
 size_t io_buffer::size() const {
-    std::lock_guard<std::mutex> protect(block_ptr->mutex_for_data);
     return __size();
 }
 
 void io_buffer::shrink_size() {
-    std::lock_guard<std::mutex> protect(block_ptr->mutex_for_data);
     __shrink_size();
 }
 
@@ -276,48 +260,18 @@ void io_buffer::shrink_size() {
 void io_buffer::pop_back_to_other_front_n(io_buffer &other, size_t n) {
     //if this two instance point to same io_buffer in fact
     if (block_ptr == other.block_ptr) {
-        std::lock_guard<std::mutex> m(block_ptr->mutex_for_data);
         self_pop_back_to_front_n(n);
-    }
-
-        //to compare the pointer,we get the order of the mutex lock,avoid the deadlock
-    else if ((size_t) block_ptr.get() < (size_t) other.block_ptr.get()) {
-        std::lock_guard<std::mutex> m(block_ptr->mutex_for_data);
-        {
-            std::lock_guard<std::mutex> m1(other.block_ptr->mutex_for_data);
-            other_pop_back_to_front_n(other, n);
-        }
     } else {
-        std::lock_guard<std::mutex> m(other.block_ptr->mutex_for_data);
-        {
-            std::lock_guard<std::mutex> m1(block_ptr->mutex_for_data);
-            other_pop_back_to_front_n(other, n);
-        }
+        other_pop_back_to_front_n(other, n);
     }
 }
 
 void io_buffer::pop_front_to_other_back_n(io_buffer &other, size_t n) {
-
     //if this two instance point to same io_buffer in fact
     if (block_ptr == other.block_ptr) {
-        std::lock_guard<std::mutex> m(mutex_for_data());
         self_pop_front_to_back_n(n);
-    }
-
-        //to compare the pointer,we get the order of the mutex lock,avoid the deadlock
-    else if ((size_t) block_ptr.get() < (size_t) other.block_ptr.get()) {
-        std::lock_guard<std::mutex> m(mutex_for_data());
-        {
-            std::lock_guard<std::mutex> m2(other.mutex_for_data());
-            other_pop_front_to_back_n(other, n);
-        }
     } else {
-        std::lock_guard<std::mutex> m(other.mutex_for_data());
-
-        {
-            std::lock_guard<std::mutex> m2(mutex_for_data());
-            other_pop_front_to_back_n(other, n);
-        }
+        other_pop_front_to_back_n(other, n);
     }
 }
 
