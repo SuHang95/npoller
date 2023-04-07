@@ -11,5 +11,5 @@ add_subdirectory(coroutine)
 
 
 if(CMAKE_COMPILER_IS_GNUCXX)
-    #add_compile_options(-D _DEBUG)
+    add_compile_options(-D _DEBUG)
 endif(CMAKE_COMPILER_IS_GNUCXX)

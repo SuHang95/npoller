@@ -40,15 +40,13 @@ public:
 
     virtual inline bool is_debug_enable() const;
 
-#ifdef _DEBUG
-
     inline std::string name() {
         return log->name;
     }
 
     friend void swap(logger &first, logger &second);
 
-#endif
+
 
 private:
     class internal_logger : public simple_logger {
@@ -231,7 +229,7 @@ inline std::string logger::time(log_time_strategy strategy) {
     return log->time(strategy);
 }
 
-#ifdef _DEBUG
+
 inline void swap(logger &first, logger &second) {
     logger *logger1 = &first < &second ? &first : const_cast<logger *> (&second);
     logger *logger2 = &first > &second ? &first : const_cast<logger *> (&second);
@@ -247,7 +245,5 @@ inline void swap(logger &first, logger &second) {
         }
     }
 }
-
-#endif
 
 #endif

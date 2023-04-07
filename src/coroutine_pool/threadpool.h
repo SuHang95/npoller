@@ -13,101 +13,101 @@
 #include<array>
 #include<atomic>
 #include<functional>
+#include<tbb/concurrent_queue.h>
 
-namespace su {
-    class thread {
-    public:
-        thread();
 
-        template<typename func, typename ...arg>
-        explicit
-        thread(func &&callable, arg &&... args):m_thread(
-                std::forward<func>(callable),
-                std::forward<arg>(args)...) {}
+/*class thread {
+public:
+    thread();
 
-        thread(const thread &) = delete;
+    template<typename func, typename ...arg>
+    explicit
+    thread(func &&callable, arg &&... args):m_thread(
+            std::forward<func>(callable),
+            std::forward<arg>(args)...) {}
 
-        thread(thread &&) = delete;
+    thread(const thread &) = delete;
 
-        inline void join();
+    thread(thread &&) = delete;
 
-        virtual ~thread();
+    inline void join();
 
-        template<typename func, typename ...arg>
-        auto enqueue(func &&f, arg &&... args) -> std::future<typename std::result_of<func(arg...)>::type> {
-            using return_type = typename std::result_of<func(arg...)>::type;
+    virtual ~thread();
 
-            auto task = std::make_shared<std::packaged_task<return_type()> >(
-                    std::bind(std::forward<func>(f), std::forward<arg...>(args)...)
-            );
+    template<typename func, typename ...arg>
+    auto enqueue(func &&f, arg &&... args) -> std::future<typename std::result_of<func(arg...)>::type> {
+        using return_type = typename std::result_of<func(arg...)>::type;
 
-            auto future = task->get_future();
-            {
-                std::unique_lock<std::mutex> lck(m_mutex);
-                m_tasks.emplace([task]() {
-                    (*task)();
-                });
-            }
-            m_cv.notify_one();
+        auto task = std::make_shared<std::packaged_task<return_type()> >(
+                std::bind(std::forward<func>(f), std::forward<arg...>(args)...)
+        );
 
-            return future;
+        auto future = task->get_future();
+        {
+            std::unique_lock<std::mutex> lck(m_mutex);
+            m_tasks.emplace([task]() {
+                (*task)();
+            });
         }
+        m_cv.notify_one();
 
-        template<typename func>
-        auto enqueue(func &&f) -> std::future<typename std::result_of<func()>::type> {
-            using return_type = typename std::result_of<func()>::type;
+        return future;
+    }
 
-            auto task = std::make_shared<std::packaged_task<return_type()> >(
-                    std::bind(std::forward<func>(f))
-            );
+    template<typename func>
+    auto enqueue(func &&f) -> std::future<typename std::result_of<func()>::type> {
+        using return_type = typename std::result_of<func()>::type;
 
-            auto future = task->get_future();
-            {
-                std::unique_lock<std::mutex> lck(m_mutex);
-                m_tasks.emplace([task]() {
-                    (*task)();
-                });
-            }
-            m_cv.notify_one();
+        auto task = std::make_shared<std::packaged_task<return_type()> >(
+                std::bind(std::forward<func>(f))
+        );
 
-            return future;
+        auto future = task->get_future();
+        {
+            std::unique_lock<std::mutex> lck(m_mutex);
+            m_tasks.emplace([task]() {
+                (*task)();
+            });
         }
+        m_cv.notify_one();
 
-    private:
-        std::atomic_bool construct;
-        std::thread m_thread;
-        std::queue<std::function<void()>> m_tasks;
-        std::mutex m_mutex;
-        std::condition_variable m_cv;
-        bool stop;
-    };
+        return future;
+    }
+
+private:
+    std::atomic_bool construct;
+    std::thread m_thread;
+    std::queue<std::function<void()>> m_tasks;
+    std::mutex m_mutex;
+    std::condition_variable m_cv;
+    bool stop;
+};*/
 
 
-    class thread_pool {
-    public:
-        thread_pool(std::size_t size = std::thread::hardware_concurrency());
+class thread_pool {
+public:
+    thread_pool(std::size_t size = std::thread::hardware_concurrency());
 
-        thread_pool(const thread_pool &) = delete;
+    thread_pool(const thread_pool &) = delete;
 
-        thread_pool(thread_pool &&) = delete;
+    thread_pool(thread_pool &&) = delete;
 
-        virtual ~thread_pool();
+    virtual ~thread_pool();
 
-        template<typename func, typename ...arg>
-        auto enqueue(func &&, arg &&...) -> std::future<typename std::result_of<func(arg...)>::type>;
+    template<typename func, typename ...arg>
+    auto enqueue(func &&, arg &&...) -> std::future<typename std::result_of<func(arg...)>::type>;
 
-        template<typename func>
-        auto enqueue(func &&) -> std::future<typename std::result_of<func()>::type>;
+    template<typename func>
+    auto enqueue(func &&) -> std::future<typename std::result_of<func()>::type>;
 
-    private:
-        std::vector<su::thread *> workers;
-        bool all_stop;
-        std::atomic_int times;
-    };
-
+protected:
+    std::vector<std::thread> workers;
+    tbb::concurrent_bounded_queue<std::function<void()>> m_tasks;
+    std::atomic_bool stop;
 };
 
-su::thread::thread() : stop(false), m_thread([this]() {
+
+/*su::thread::thread() : stop(false), m_thread([this]() {
     while (construct.load() == false) {
         usleep(100);
     }
@@ -148,31 +148,83 @@ inline void su::thread::join() {
 
 su::thread::~thread() {
     join();
-}
+}*/
 
 
-su::thread_pool::thread_pool(std::size_t size) : all_stop(false) {
+thread_pool::thread_pool(std::size_t size) : m_tasks(), stop(false) {
     for (size_t i = 0; i < size; i++) {
-        workers.push_back(new su::thread());
+        workers.emplace_back([this]() {
+            while (true) {
+                std::function<void()> task;
+                {
+                    m_tasks.pop(task);
+                }
+                task();
+                if (stop == true) {
+                    while (m_tasks.try_pop(task)) {
+                        task();
+                    }
+                    return;
+                }
+            }
+
+        });
     }
+#ifdef _DEBUG
+    workers.emplace_back([this]() {
+        while (true) {
+            if (stop == true) {
+                break;
+            }
+            sleep(1);
+            std::cout << m_tasks.size() << std::endl;
+        }
+    });
+#endif
 }
 
-su::thread_pool::~thread_pool() {
-    for (su::thread *thread: workers) {
-        delete thread;
+thread_pool::~thread_pool() {
+    stop = true;
+    for (int i = 0; i < 4 * workers.size(); i++) {
+        m_tasks.push([]() {});
+    }
+    for (auto &thread: workers) {
+        thread.join();
     }
 }
 
 template<typename func, typename ...arg>
-auto su::thread_pool::enqueue(func &&f, arg &&... args) -> std::future<typename std::result_of<func(arg...)>::type> {
-    return workers[times.fetch_add(1) % workers.size()]
-            ->enqueue(std::forward<func>(f), std::forward<arg...>(args...));
+auto thread_pool::enqueue(func &&f, arg &&... args) -> std::future<typename std::result_of<func(arg...)>::type> {
+    using return_type = typename std::result_of<func(arg...)>::type;
+
+    auto task = std::make_shared<std::packaged_task<return_type()> >(
+            std::bind(std::forward<func>(f), std::forward<arg...>(args)...)
+    );
+
+    auto future = task->get_future();
+    {
+        m_tasks.push([task]() {
+            (*task)();
+        });
+    }
+    return future;
 }
 
 template<typename func>
-auto su::thread_pool::enqueue(func &&f) -> std::future<typename std::result_of<func()>::type> {
-    return workers[times.fetch_add(1) % workers.size()]
-            ->enqueue(std::forward<func>(f));
+auto thread_pool::enqueue(func &&f) -> std::future<typename std::result_of<func()>::type> {
+    using return_type = typename std::result_of<func()>::type;
+
+    auto task = std::make_shared<std::packaged_task<return_type()> >(
+            std::bind(std::forward<func>(f))
+    );
+
+    auto future = task->get_future();
+    {
+        m_tasks.push([task]() {
+            (*task)();
+        });
+    }
+    return future;
 }
 
 

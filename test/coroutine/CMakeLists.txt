@@ -5,4 +5,5 @@ add_executable(coroutine_test
         coroutine_test.cpp
         )
 
-target_link_libraries(coroutine_test ${CMAKE_THREAD_LIBS_INIT})
+target_link_libraries(coroutine_test ${CMAKE_THREAD_LIBS_INIT}
+        /usr/lib/libtbb.so)

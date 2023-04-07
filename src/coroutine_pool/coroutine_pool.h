@@ -33,11 +33,12 @@ public:
 
     typedef T type;
 
-    coroutine_task(const std::coroutine_handle<promise_type> &h, std::future<T> &&future) : future_(std::move(future)) {
+    coroutine_task(const std::coroutine_handle<promise_type> &h, const std::shared_future<T> &future) : future_(
+            future) {
         h_ = h;
     }
 
-    coroutine_task(const coroutine_task &) = delete;
+    coroutine_task(const coroutine_task &other) : future_(other.future_), h_(other.h_) {}
 
     coroutine_task(coroutine_task &&other) : future_(std::move(other.future_)), h_(other.h_) {}
 
@@ -51,11 +52,10 @@ public:
 
     struct promise_type : std::promise<T> {
         coroutine_task get_return_object() {
-            return coroutine_task(std::coroutine_handle<promise_type>::from_promise(*this), this->get_future());
+            return coroutine_task(std::coroutine_handle<promise_type>::from_promise(*this), this->get_future().share());
         }
 
-        std::suspend_never initial_suspend() {
-            //std::cout << "initial suspend!" << std::endl;
+        std::suspend_always initial_suspend() {
             return {};
         }
 
@@ -77,6 +77,45 @@ public:
             resume_all_waitor(false);
         }
 
+        template<typename R>
+        struct result_awaitable {
+        public:
+            explicit result_awaitable(const coroutine_task<R> & task) : coroutineTask(task) {}
+
+            explicit result_awaitable(coroutine_task<R> && task) : coroutineTask(task) {}
+
+            bool await_ready() {
+                return coroutineTask.done();
+            }
+
+            bool await_suspend(std::coroutine_handle<> h) {
+                if (!coroutineTask.add_waitor(h)) {
+                    result = coroutineTask();
+                    return false;
+                }
+                return true;
+            }
+
+            R &await_resume() {
+                return result.has_value() ? *result : coroutineTask();
+            }
+
+        private:
+            coroutine_task<R> coroutineTask;
+            std::optional<R> result;
+        };
+
+
+        template<typename U>
+        U&& await_transform(U&& awaitable) noexcept
+        {
+            return static_cast<U&&>(awaitable);
+        }
+
+        template<class R>
+        result_awaitable<R>& await_transform(coroutine_task<R>&& task) noexcept{
+            return result_awaitable(task);
+        }
 
         void unhandled_exception() {
             std::cout << "Exception happen!" << std::current_exception << std::endl;
@@ -156,7 +195,7 @@ public:
 
 private:
     std::coroutine_handle<promise_type> h_;
-    std::future<T> future_;
+    std::shared_future<T> future_;
 };
 
 template<>
@@ -166,7 +205,7 @@ struct coroutine_task<void> {
             return coroutine_task{std::coroutine_handle<promise_type>::from_promise(*this), this->get_future()};
         }
 
-        std::suspend_never initial_suspend() {
+        std::suspend_always initial_suspend() {
             return {};
         }
 
@@ -197,15 +236,19 @@ struct coroutine_task<void> {
     std::future<void> future_;
 };
 
-class coroutine_pool : su::thread_pool {
+class coroutine_pool : public thread_pool {
 public:
-    coroutine_pool() {}
+    coroutine_pool() : endflag(std::make_shared<std::atomic_bool>(false)) {}
 
-    coroutine_pool(size_t size) : thread_pool(size) {}
+    coroutine_pool(size_t size) : thread_pool(size), endflag(std::make_shared<std::atomic_bool>(false)) {}
 
     coroutine_pool(const coroutine_pool &) = delete;
 
     coroutine_pool(coroutine_pool &&) = delete;
+
+    ~coroutine_pool() {
+        endflag->store(true, std::memory_order_relaxed);
+    }
 
     template<class T>
     class execute_callback {
@@ -258,20 +301,20 @@ public:
     };
 
     template<typename T, typename wait_timepoint>
-    class enque_awaitable {
+    class enqueue_awaitable {
     public:
-        enque_awaitable(std::future<coroutine_task<T>> &&_future, std::shared_ptr<execute_callback<T>> callback,
-                        coroutine_pool *pool)
+        enqueue_awaitable(std::future<coroutine_task<T>> &&_future, std::shared_ptr<execute_callback<T>> callback,
+                          coroutine_pool *pool)
                 : future_(std::move(_future)), callback_(callback), pool_(pool) {}
 
-        enque_awaitable(const enque_awaitable &) = delete;
+        enqueue_awaitable(const enqueue_awaitable &) = delete;
 
-        enque_awaitable operator=(const enque_awaitable &) = delete;
+        enqueue_awaitable operator=(const enqueue_awaitable &) = delete;
 
-        enque_awaitable(enque_awaitable &&other) : future_(std::move(other.future_)),
-                                                   return_value(std::move(other.return_value)) {}
+        enqueue_awaitable(enqueue_awaitable &&other) : future_(std::move(other.future_)),
+                                                       return_value(std::move(other.return_value)) {}
 
-        enque_awaitable operator=(enque_awaitable &&other) {
+        enqueue_awaitable operator=(enqueue_awaitable &&other) {
             if (this != &other) {
                 future_ = std::move(other.future_);
                 return_value = std::move(other.return_value);
@@ -280,10 +323,6 @@ public:
         }
 
         bool await_ready() {
-            if constexpr (std::is_same<wait_timepoint, wait_with_coroutine_start>::value) {
-                return future_.
-                        wait_for(std::chrono::seconds(0)) == std::future_status::ready;
-            }
             if (!return_value.has_value()) {
                 bool is_ready = future_.
                         wait_for(std::chrono::seconds(0)) == std::future_status::ready;
@@ -293,22 +332,33 @@ public:
                 }
                 return_value = std::move(future_.get());
             }
-            bool done = return_value.value().done();
-            return done;
+
+            if constexpr (std::is_same<wait_timepoint, wait_with_coroutine_start>::value) {
+                return true;
+            } else {
+                return return_value.value().done();
+            }
         }
 
         bool await_suspend(std::coroutine_handle<> h) {
-            if constexpr (std::is_same<wait_timepoint, wait_with_coroutine_start>::value) {
-                return future_.
-                        wait_for(std::chrono::seconds(0)) != std::future_status::ready;
-            }
+#ifdef _DEBUG
+            pool_->h_resume_count.fetch_add(1);
+#endif
             bool callback_set = callback_->set_callback([h, this](coroutine_task<T> &t) {
                 //only if callback set successfully, this lambda will run and in this case
                 //at least one of the thread in thread pool is still running, the thread pool object is still valid
 
                 //TODO PAY MORE ATTENTION ON THIS
-                if (!t.add_waitor(h)) {
+                if constexpr (std::is_same<wait_timepoint, wait_with_coroutine_start>::value) {
+                    if (pool_->is_busy()) {
+                        h.resume();
+                        return;
+                    }
                     pool_->add_runnable(h);
+                } else {
+                    if (!t.add_waitor(h)) {
+                        pool_->add_runnable(h);
+                    }
                 }
 
             });
@@ -318,29 +368,39 @@ public:
                 int count = 0;
                 while (!await_ready()) {
                     count++;
-                }
+                    if (count > 3) {
+                        if (!return_value.has_value()) {
+                            return_value = std::move(future_.get());
+                        }
+                    }
 #ifdef _DEBUG
-                if (count > 0) {
-                    pool_->bad_situation1.fetch_add(1, std::memory_order_relaxed);
-                    std::cout << "count = " << count << std::endl;
-                }
+                    if (count > 0) {
+                        pool_->bad_situation1.fetch_add(1, std::memory_order_relaxed);
+                        std::cout << "count = " << count << std::endl;
+                    }
 #endif
+                }
+
                 return false;
             }
             return true;
         }
 
-        T await_resume() {
-            if (!return_value.has_value()) {
+        auto await_resume() {
 #ifdef _DEBUG
-                if (future_.
+            pool_-> return_count1.fetch_add(1);
+#endif
+            if constexpr (std::is_same<wait_timepoint, wait_with_coroutine_start>::value) {
+                return return_value.has_value() ? *return_value : future_.get();
+            } else {
+#ifdef _DEBUG
+                if (!return_value.has_value() && future_.
                         wait_for(std::chrono::seconds(0)) != std::future_status::ready) {
                     pool_->bad_situation.fetch_add(1);
                 }
 #endif
-                return future_.get()();
+                return return_value.has_value() ? return_value.value()() : future_.get()();
             }
-            return return_value.value()();
         }
 
 
@@ -355,33 +415,44 @@ public:
         coroutine_pool *pool_;
     };
 
-
-    template<typename routine_func, typename ...arg>
-    auto submit_task_end(routine_func &&func, arg &&...args) {
+    template<typename wait_timepoint, typename routine_func, typename ...arg>
+    auto submit_task(routine_func &&func, arg &&...args) {
         using return_type = typename std::result_of<routine_func(arg...)>::type;
         using T = typename return_type::type;
         std::shared_ptr<execute_callback<T>> callback_ptr = std::make_shared<execute_callback<T>>();
         auto function = std::bind(std::forward<routine_func>(func), std::forward<arg...>(args...));
-        std::future<return_type> future = this->enqueue(
-                [_function = std::move(function)](
-                        std::shared_ptr<execute_callback<T>> callback) mutable {
+        std::promise<coroutine_task<T>> promise;
+        std::future<return_type> future = promise.get_future();
+
+        auto task = std::make_shared<std::packaged_task<void()> >(
+                [_function = std::move(function), callback_ptr, _promise = std::move(promise)]() mutable {
+                    //this sequence is very important!!! do not change if you don't know what you are doing now
                     auto ret = _function();
-                    (*callback)(ret);
-                    return ret;
-                }, callback_ptr
+                    _promise.set_value(ret);
+                    (*callback_ptr)(ret);
+                    ret.resume();
+                }
         );
 
-        return enque_awaitable<T, wait_with_coroutine_end>(std::move(future), callback_ptr, this);
+        m_tasks.push([=]() {
+            (*task)();
+        });
+
+        return enqueue_awaitable<T, wait_timepoint>(std::move(future), callback_ptr, this);
     }
 
-    /*template<typename routine_func, typename ...arg>
+    template<typename routine_func, typename ...arg>
     auto submit_task_start(routine_func &&func, arg &&...args) {
-        using return_type = typename std::result_of<routine_func(arg...)>::type;
-        std::future<return_type> future = this->enqueue(std::forward<routine_func>(func),
-                                                        std::forward<arg...>(args...));
+        return submit_task<wait_with_coroutine_start, routine_func, arg...>(std::forward<routine_func>(func),
+                                                                            std::forward<arg...>(args...));
+    }
 
-        return enque_awaitable<typename return_type::type, wait_with_coroutine_start>(std::move(future));
-    }*/
+    template<typename routine_func, typename ...arg>
+    auto submit_task_end(routine_func &&func, arg &&...args) {
+        return submit_task<wait_with_coroutine_end, routine_func, arg...>(std::forward<routine_func>(func),
+                                                                          std::forward<arg...>(args...));
+    }
+
     void add_runnable(std::coroutine_handle<> h) {
         this->enqueue([h, this]() {
             h.resume();
@@ -389,10 +460,18 @@ public:
     }
 
 private:
-    //tbb::concurrent_queue<std::coroutine_handle<>> runnable;
+    std::shared_ptr<std::atomic_bool> endflag;
+
+    bool is_busy() {
+        return m_tasks.size() >= ((workers.size() / 2) * 3);
+    }
+
 #ifdef _DEBUG
     std::atomic_int64_t bad_situation;
     std::atomic_int64_t bad_situation1;
+    std::atomic_int64_t h_resume_count;
+    std::atomic_int64_t return_count1;
+    std::atomic_int64_t return_count2;
 #endif
 };
 
