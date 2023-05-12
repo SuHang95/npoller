@@ -15,6 +15,7 @@ tcp::tcp(const this_is_private &p, const logger &_log) :
         log.error("Create a socket instance fail!");
         return;
     }
+    log.debug("Create a socket instance with fd:%d", fd);
 }
 
 void tcp::connect(const char *__addr, unsigned short int __port) {
@@ -24,36 +25,40 @@ void tcp::connect(const char *__addr, unsigned short int __port) {
     sockaddr_in other = make_sockaddr_in(__addr, __port);
     socklen_t other_len = sizeof(sockaddr_in);
     int ret;
+    bool need_retry;
+    int retry_times = 0;
 
     //only if tcp is not on,we can use the connect function
     if (status() != initializing || !valid_unsafe()) {
         return;
     }
-    ret = ::connect(fd, (sockaddr *) &other, other_len);
-    if (ret < 0) {
-        //actually, most situation it will return EINPROGRESS
-        if (errno == EINPROGRESS) {
-            set_status(connecting);
+    do {
+        need_retry = false;
+        ret = ::connect(fd, (sockaddr *) &other, other_len);
+        if (ret < 0) {
+            //actually, most situation it will return EINPROGRESS
+            if (errno == EINPROGRESS) {
+                set_status(connecting);
+                address = other;
+                port = __port;
+
+            } else if (errno == EALREADY) {
+                set_status(connecting);
+            } else if (errno == EISCONN) {
+                connect_complete();
+            } else if (errno == EINTR) {
+                need_retry = true;
+            } else {
+                log.error("Try connect the %s:%d,some error occur %s!", \
+                    __addr, __port, strerror(errno));
+                tcp::close();
+            }
+        } else {
+            connect_complete();
             address = other;
             port = __port;
-
-        } else if (errno == EALREADY) {
-            set_status(connecting);
-        } else if (errno == EISCONN) {
-            connect_complete();
-        } else if (errno == ENETUNREACH) {
-            log.error("Network is unreachable!");
-            tcp::internal_close();
-        } else {
-            log.error("Try connect the %s:%d,some error occur %s!", \
-                    __addr, port, strerror(errno));
-            tcp::internal_close();
         }
-    } else {
-        connect_complete();
-        address = other;
-        port = __port;
-    }
+    } while (need_retry && retry_times++ < 3);
 }
 
 void tcp::set_addr_and_test() {
@@ -71,17 +76,23 @@ void tcp::set_addr_and_test() {
             return;
         }
     }
-    std::string peer_name = inet_ntoa(peer.sin_addr) + ntohs(peer.sin_port);
+    std::string peer_name = std::string(inet_ntoa(peer.sin_addr)) +
+            ":" + std::to_string(ntohs(peer.sin_port));
 
     if (::getpeername(fd, (sockaddr *) &local, &size) < 0) {
         log.error("Query tcp local addr fail:%s", strerror(errno));
         return;
     }
-    std::string local_name = inet_ntoa(local.sin_addr) + ntohs(local.sin_port);
+    std::string local_name = std::string(inet_ntoa(local.sin_addr))+":" +
+            std::to_string(ntohs(local.sin_port));
 
     std::string time = log.time(log_time_strategy::millisecond);
 
     time_addr_str = local_name + "<-->" + peer_name + "@" + time;
+}
+
+bool tcp::is_open() {
+    return status() != invalid && status() != closed;
 }
 
 void tcp::close() {
@@ -90,12 +101,22 @@ void tcp::close() {
 
     if (get_manager_unsafe() != nullptr) {
         get_manager_unsafe()->remove_io(fd);
-        //set_manager(nullptr);
+        manager.store(nullptr, std::memory_order::relaxed);
     }
 
-    if (valid_unsafe()) {
-        this->tcp::internal_close();
-    }
+    //we must make sure the close function was only called by once
+    auto current_status = status();
+    bool update_success;
+    do {
+        if (current_status != invalid && current_status != closed) {
+            update_success = __status.compare_exchange_strong(current_status, closed,
+                                                              std::memory_order_relaxed, std::memory_order::relaxed);
+            if (update_success)
+                ::close(fd);
+        }
+    } while (!update_success && (current_status != closed && current_status != invalid));
+
+    //fd releasing work will be completed in destructor
 }
 
 bool tcp::process_event(::epoll_event &ev) {

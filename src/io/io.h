@@ -27,23 +27,23 @@ protected:
 
 public:
     struct io_type {
-        unsigned readable:1;
-        unsigned writable:1;
+        unsigned readable: 1;
+        unsigned writable: 1;
     };
 
-    constexpr static io_type readable = {1,0};
-    constexpr static io_type writable = {0,1};
+    constexpr static io_type readable = {1, 0};
+    constexpr static io_type writable = {0, 1};
 
     //the protected method is only used on event loop thread
     io(const this_is_private &, const int _fd, const io_type,
-            const bool _support_epollrdhup, const logger &_log);
+       const bool _support_epollrdhup, const logger &_log);
 
     io(const this_is_private &, const int _fd, const io_type type,
-            const bool _support_epollrdhup) : io(this_is_private(0), _fd, type,_support_epollrdhup,
-                                                                        logger("io" + std::hash<std::string>{}(
-                                                                                std::to_string(fd +
-                                                                                               reinterpret_cast<size_t>(this))),
-                                                                               logger::INFO)) {}
+       const bool _support_epollrdhup) : io(this_is_private(0), _fd, type, _support_epollrdhup,
+                                            logger("io" + std::hash<std::string>{}(
+                                                           std::to_string(fd +
+                                                                          reinterpret_cast<size_t>(this))),
+                                                   logger::INFO)) {}
 
     io(const io &) = delete;
 
@@ -58,6 +58,24 @@ public:
     inline int id() const {
         return std::hash<std::string>{}(
                 std::to_string(fd + reinterpret_cast<size_t>(this)));
+    }
+
+    virtual inline bool is_open() {
+        return valid_safe();
+    }
+
+    virtual inline void close() {
+        //we must make sure the close function was only called by once
+        auto current_status = valid_safe();
+        bool update_success;
+        do {
+            if (current_status != false) {
+                update_success = valid.compare_exchange_strong(current_status, false,
+                                                               std::memory_order_relaxed, std::memory_order::relaxed);
+                if (update_success)
+                    ::close(fd);
+            }
+        } while (!update_success && (current_status));
     }
 
     //register the event
@@ -137,7 +155,7 @@ protected:
     int fd;
     bool support_epollrdhup;
 
-    uint8_t cache_line_padding1[cache_line_size - 3 * sizeof(std::atomic<unsigned char>)
+    uint8_t cache_line_padding1[cache_line_size - 4 * sizeof(std::atomic<unsigned char>)
                                 - sizeof(std::atomic<event_processor *>) - sizeof(int)];
 
 
@@ -220,24 +238,24 @@ inline void io::set_readable(bool _readable) {
             return;
         }
         current_type.readable = _readable ? 0x01 : 0;
-        success = type.compare_exchange_strong(expected_type,current_type,std::memory_order_relaxed
-                ,std::memory_order_relaxed);
+        success = type.compare_exchange_strong(expected_type, current_type, std::memory_order_relaxed,
+                                               std::memory_order_relaxed);
     } while (!success);
 }
 
-inline void io::set_writable(bool _writable){
+inline void io::set_writable(bool _writable) {
     io_type expected_type = type.load(std::memory_order_relaxed);
     io_type current_type;
     bool success;
     do {
         current_type = expected_type;
-        if (((current_type.writable== 0x01) & _writable) ||
+        if (((current_type.writable == 0x01) & _writable) ||
             ((current_type.writable == 0x0) & !_writable)) {
             return;
         }
         current_type.writable = _writable ? 0x01 : 0;
-        success = type.compare_exchange_strong(expected_type,current_type,std::memory_order_relaxed
-                ,std::memory_order_relaxed);
+        success = type.compare_exchange_strong(expected_type, current_type, std::memory_order_relaxed,
+                                               std::memory_order_relaxed);
     } while (!success);
 }
 

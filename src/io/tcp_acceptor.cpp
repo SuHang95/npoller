@@ -22,8 +22,6 @@ tcp_acceptor::tcp_acceptor(const io::this_is_private &, const logger &_log, unsi
 }
 
 bool tcp_acceptor::start_accept(event_processor *processor, int queue_size) {
-
-
     if (bind(fd, (struct sockaddr *) &address, sizeof(address)) < 0) {
         char s_addr[INET_ADDRSTRLEN];
         //we need _errno because later there will be an inet_ntop call
@@ -53,11 +51,13 @@ bool tcp_acceptor::start_accept(event_processor *processor, int queue_size) {
         return false;
     }
 
-    std::shared_ptr<io> this_ptr = shared_from_this();
-    if (!processor->add_io(this_ptr)) {
+    log.debug("tcp acceptor:%d has listen successfully!", fd);
+    std::shared_ptr<tcp_acceptor> this_ptr = shared_from_this();
+
+    log.debug("Try to add the acceptor instance %d to event processor!", fd);
+    if (!processor->add_io(std::dynamic_pointer_cast<io>(this_ptr))) {
         return false;
     }
-    this->update_manager(processor);
 
     return true;
 }
@@ -66,18 +66,29 @@ void tcp_acceptor::direct_read() {
     // Accept connections
     sockaddr_in peer_address;
     socklen_t peer_address_len = sizeof(peer_address);
-    while (true) {
+    int retry_times = 0;
+    bool need_retry;
+    do {
+        need_retry = false;
         int client_fd = accept(fd, (sockaddr *) &peer_address, &peer_address_len);
         if (client_fd < 0) {
-            log.error("accept address %d fail,%s", fd, strerror(errno));
             switch (errno) {
                 case EBADF:
-                case EINVAL:
                     mark_invalid();
+                    log.error("Accept on fd %d fail,%s", fd, strerror(errno));
+                case EINVAL:
+                    close();
+                    log.error("Accept on fd %d fail,%s!local address:%s, port:%d.", fd,
+                              strerror(errno), inet_ntoa(address.sin_addr), ntohs(address.sin_port));
                     return;
                 case EINTR:
+                    need_retry = true;
                     break;
+                case EAGAIN:
+                    return;
                 default:
+                    log.error("Accept on fd %d fail,%s!local address:%s, port:%d.", fd,
+                              strerror(errno), inet_ntoa(address.sin_addr), ntohs(address.sin_port));
                     return;
             }
             continue;
@@ -87,5 +98,5 @@ void tcp_acceptor::direct_read() {
                                                                 this->log);
         this->manager.load(std::memory_order_relaxed)->add_io(client_tcp);
         log.debug("Accept a tcp connection:%s", client_tcp->descriptor().c_str());
-    }
+    } while (need_retry && retry_times++ < 3);
 }

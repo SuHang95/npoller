@@ -33,7 +33,15 @@ public:
     //register the event
     //virtual bool register(io_op *);
 
-    void close();
+    virtual ~tcp() {
+        if (connected_handler != nullptr) {
+            delete connected_handler;
+        }
+    }
+
+    void close() override;
+
+    bool is_open() override;
 
     inline std::string descriptor() const;
 
@@ -96,8 +104,6 @@ protected:
 
     inline sockaddr_in make_sockaddr_in(const char *addr, int port);
 
-    inline void internal_close();
-
     static inline io::io_type get_io_type(tcp_status _status);
 
     inline void set_connected_handler(std::packaged_task<std::shared_ptr<tcp>(bool)> *handler);
@@ -156,7 +162,7 @@ inline tcp::tcp_status tcp::status_unsafe() {
 }
 
 inline std::string tcp::descriptor() const {
-    return fd + ":" + time_addr_str;
+    return std::to_string(fd) + ":" + time_addr_str;
 }
 
 inline tcp::tcp_status tcp::status() const {
@@ -165,11 +171,6 @@ inline tcp::tcp_status tcp::status() const {
 
 inline void tcp::set_status(tcp::tcp_status _status) {
     __status.store(_status, std::memory_order_relaxed);
-}
-
-void tcp::internal_close() {
-    ::close(fd);
-    set_status(closed);
 }
 
 inline void tcp::set_connected_handler(std::packaged_task<std::shared_ptr<tcp>(bool)> *handler) {

@@ -98,7 +98,8 @@ bool event_processor::add_io(std::shared_ptr<io> _io) throw() {
     {
         tbb::concurrent_hash_map<int, std::shared_ptr<io>>::const_accessor accessor;
         if (io_map.find(accessor, _io->fd)) {
-            throw std::runtime_error("Try to add a fd which in epoll fd 's map!");
+            throw std::runtime_error("Try to add a fd " + std::to_string(_io->fd) +
+                                     " which in epoll fd 's map!");
         }
     }
 
