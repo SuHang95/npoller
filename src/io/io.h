@@ -103,15 +103,13 @@ protected:
 
     event_processor *get_manager_safe();
 
-    bool valid_safe();
+    virtual bool valid_safe();
 
-    bool readable_safe();
+    virtual bool readable_safe();
 
-    bool writable_safe();
+    virtual bool writable_safe();
 
     bool write_busy_safe();
-
-    virtual void set_valid(bool);
 
     virtual void set_readable(bool);
 
@@ -210,11 +208,6 @@ inline bool io::writable_safe() {
 inline bool io::write_busy_safe() {
     return write_busy.load(std::memory_order_relaxed);
 }
-
-inline void io::set_valid(bool _valid) {
-    valid.store(_valid, std::memory_order_relaxed);
-}
-
 
 inline void io::set_readable(bool _readable) {
     io_type expected_type = type.load(std::memory_order_relaxed);

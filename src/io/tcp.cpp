@@ -8,41 +8,14 @@ tcp::tcp(const this_is_private &p, int _fd, tcp_status _status, const logger &_l
     }
 }
 
-tcp::tcp(const this_is_private &p, const logger &_log, const char *addr, unsigned short int port) :
+tcp::tcp(const this_is_private &p, const logger &_log) :
         tcp(this_is_private(0), socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0), initializing, _log) {
     if (fd < 0) {
-        set_valid(false);
+        mark_invalid();
         log.error("Create a socket instance fail!");
         return;
     }
-
-    address = make_sockaddr_in(addr, port);
-    auto address_len = sizeof(address);
-
-    int ret = bind(fd, (struct sockaddr *) &address, address_len);
-    if (ret < 0) {
-        log.error("bind fail:%s!", strerror(errno));
-    }
 }
-
-tcp::tcp(const this_is_private &p, const logger &_log, in_addr_t addr, unsigned short int port) :
-        tcp(this_is_private(0), socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0),
-            initializing, _log) {
-    if (fd < 0) {
-        set_valid(false);
-        log.error("Create a socket instance fail!");
-        return;
-    }
-
-    address = make_sockaddr_in(addr, port);
-    auto address_len = sizeof(address);
-
-    int ret = bind(fd, (struct sockaddr *) &address, address_len);
-    if (ret < 0) {
-        log.error("bind fail!");
-    }
-}
-
 
 void tcp::connect(const char *__addr, unsigned short int __port) {
 #ifdef _debug
@@ -61,22 +34,13 @@ void tcp::connect(const char *__addr, unsigned short int __port) {
         //actually, most situation it will return EINPROGRESS
         if (errno == EINPROGRESS) {
             set_status(connecting);
-
-            set_readable(false);
-            set_writable(false);
-
             address = other;
             port = __port;
 
         } else if (errno == EALREADY) {
             set_status(connecting);
         } else if (errno == EISCONN) {
-            set_status(connected);
-            set_readable(true);
-            set_writable(true);
-            set_write_busy(false);
-            support_epollrdhup = true;
-            handle_connect_result(true);
+            connect_complete();
         } else if (errno == ENETUNREACH) {
             log.error("Network is unreachable!");
             tcp::internal_close();
@@ -86,12 +50,7 @@ void tcp::connect(const char *__addr, unsigned short int __port) {
             tcp::internal_close();
         }
     } else {
-        set_status(connected);
-        set_readable(true);
-        set_writable(true);
-        set_write_busy(false);
-        support_epollrdhup = true;
-
+        connect_complete();
         address = other;
         port = __port;
     }
@@ -105,7 +64,7 @@ void tcp::set_addr_and_test() {
     if (::getpeername(fd, (sockaddr *) &peer, &size) < 0) {
         if (errno == EBADF || errno == ENOTSOCK || errno == ENOTCONN) {
             //for ENOTCONN,we don't know peer address,also make this fd invalid
-            set_valid(false);
+            mark_invalid();
             return;
         } else {
             log.error("Query tcp peer name fail:%s", strerror(errno));
@@ -126,15 +85,17 @@ void tcp::set_addr_and_test() {
 }
 
 void tcp::close() {
-    this->tcp::prepare_close();
-
     clean_read();
     clean_write();
 
-    //set_manager(nullptr);
+    if (get_manager_unsafe() != nullptr) {
+        get_manager_unsafe()->remove_io(fd);
+        //set_manager(nullptr);
+    }
 
-    if (valid_unsafe())
+    if (valid_unsafe()) {
         this->tcp::internal_close();
+    }
 }
 
 bool tcp::process_event(::epoll_event &ev) {
@@ -149,7 +110,6 @@ bool tcp::process_event(::epoll_event &ev) {
             if (status() == connecting) {
                 return get_event(ev);
             } else if (status() == connected) {
-                handle_connect_result(true);
                 break;
             } else {
                 close();
@@ -204,33 +164,21 @@ bool tcp::process_event(::epoll_event &ev) {
 
     }
 
-    if (write_busy_unsafe() == 0) {
+    if (!write_busy_unsafe()) {
         direct_write();
         process_write();
     }
 
-    if (readable_unsafe() == 0 && writable_unsafe() == 0) {
-        if (get_manager_unsafe() != nullptr) {
-            get_manager_unsafe()->remove_io(fd);
-            //set_manager(nullptr);
-        }
-        this->tcp::internal_close();
-        clean_read();
-        clean_write();
-        log.debug("We have clean the event list from %d and close it!", fd);
+    if (status_unsafe() == closed) {
+        close();
         return false;
     }
 
 
-    if (status_unsafe() == peer_shutdown_write || readable_unsafe() == 0) {
-        if (get_manager_unsafe() != nullptr) {
-            get_manager_unsafe()->remove_io(fd);
-            //set_manager(nullptr);
-        }
-        this->tcp::internal_close();
-        clean_read();
-        clean_write();
-        log.debug("We have clean the event list from %d and close it!", fd);
+    if (status_unsafe() == peer_shutdown_write) {
+        //TODO to make sure the logic when we get peer shut down
+        //temporarily we will close the connection
+        close();
         return false;
     }
 
@@ -244,51 +192,32 @@ bool tcp::get_event(epoll_event &ev) {
     }
 
     ev.events |= EPOLLET;
-    tcp_status l_status = status_unsafe();
-    if (l_status == initializing || l_status == connecting) {
-        ev.events = EPOLLIN | EPOLLOUT;
-        ev.data.fd = fd;
-        return true;
-    } else if (l_status == connected) {
-        ev.events = EPOLLIN | EPOLLRDHUP;
-        if (write_busy_unsafe())
-            ev.events |= EPOLLOUT;
-        ev.data.fd = fd;
-        return true;
-    } else if (l_status == peer_shutdown_write) {
-        ev.events = EPOLLOUT;
-        ev.data.fd = fd;
-
-        set_readable(false);
-        support_epollrdhup = false;
-
-        return true;
-    } else if (l_status == shutdown_write) {
-        ev.events = EPOLLIN | EPOLLRDHUP;
-        ev.data.fd = fd;
-
-        set_writable(false);
-        support_epollrdhup = false;
-
-        return true;
-    } else if (l_status == closed) {
-        if (get_manager_unsafe() != nullptr) {
-            get_manager_unsafe()->remove_io(fd);
-            //set_manager(nullptr);
-        }
-        this->tcp::close();
-
-        return false;
-    } else {
-        if (get_manager_unsafe() != nullptr) {
-            get_manager_unsafe()->remove_io(fd);
-            //set_manager(nullptr);
-        }
-        this->tcp::internal_close();
-        return false;
+    tcp_status current_status = status_unsafe();
+    switch (current_status) {
+        case initializing:
+        case connecting:
+            ev.events = EPOLLIN | EPOLLOUT;
+            ev.data.fd = fd;
+            return true;
+        case connected:
+            ev.events = EPOLLIN | EPOLLRDHUP;
+            if (write_busy_unsafe())
+                ev.events |= EPOLLOUT;
+            ev.data.fd = fd;
+            return true;
+        case peer_shutdown_write:
+            ev.events = EPOLLOUT;
+            ev.data.fd = fd;
+            support_epollrdhup = false;
+            return true;
+        case shutdown_write:
+            ev.events = EPOLLIN | EPOLLRDHUP;
+            ev.data.fd = fd;
+            return true;
+        case closed:
+            close();
+            return false;
     }
-
-    return true;
 }
 
 
@@ -304,7 +233,7 @@ void tcp::reconnect() {
         //use getsockopt() to get and clear the error associated with fd
         if (getsockopt(fd, SOL_SOCKET, SO_ERROR, &err, &len) < 0) {
             log.error("Get socket option failed %s!", strerror(errno));
-            this->tcp::prepare_close();
+            this->set_status(closed);
             return;
         }
         //In general,error can't be EINPROGRESS
@@ -312,23 +241,20 @@ void tcp::reconnect() {
             set_status(connecting);
             return;
         } else if (err == EISCONN) {
-            set_status(connected);
-            set_readable(true);
-            set_writable(true);
+            connect_complete();
             return;
         } else if (err == ENETUNREACH) {
             log.error("Network is unreachable!");
-            this->tcp::prepare_close();
+            this->set_status(closed);
             return;
         } else {
             log.error("The socket pair %s connected fail %s",
                       time_addr_str.c_str(), strerror(errno));
-            this->tcp::prepare_close();
+            this->set_status(closed);
             return;
         }
     } else {
-        set_status(connected);
-        set_readable(true);;
+        connect_complete();
         return;
     }
 }
@@ -340,24 +266,16 @@ void tcp::direct_read() {
         return;
     }
 
-    //don't know what does the code below mean
-    /*if (readable_unsafe()) {
-        if (writable_unsafe() || connect_status == 2) {
-            connect_status = 3;
-            log.debug("A TCP connection %d has been close or shutdown write by peer,"\
-                "Its tcp_status turns to 3", this->fd);
-        } else {
-            log.info("A tcp connection %d can't read with tcp_status=%d"\
-                "can write=%d", fd, static_cast<int>(connect_status.load()),
-                     reinterpret_cast<uint8_t>(writable_unsafe.load()));
-            if (is_managed && get_manager_unsafe != nullptr) {
-                get_manager_unsafe->remove_io(fd);
-                get_manager_unsafe == nullptr;
-                is_managed = 0;
-            }
-            this->tcp::internal_close();
-        }
-    }*/
+    //in some scenarios, direct_read will mark the io as unreadable, so we need check the status of tcp
+    //and do corresponding actions
+    auto current_status = status_unsafe();
+
+    if (current_status == peer_shutdown_write) {
+        log.debug("A TCP connection %d has been closed or shutdown write by peer!", fd);
+    } else if (current_status == closed) {
+        log.info("A tcp connection %d will close", fd);
+        close();
+    }
 }
 
 void tcp::direct_write() {
@@ -374,6 +292,108 @@ void tcp::direct_write() {
             this->close();
         }
     }
+}
+
+bool tcp::valid_safe() {
+    return status() != invalid;
+}
+
+bool tcp::readable_safe() {
+    auto current_status = status();
+    return current_status == connected || current_status == shutdown_write;
+}
+
+bool tcp::writable_safe() {
+    auto current_status = status();
+    return current_status == connected || current_status == peer_shutdown_write;
+}
+
+bool tcp::valid_unsafe() {
+    auto current_status = status_unsafe();
+    return current_status != invalid;
+}
+
+bool tcp::readable_unsafe() {
+    auto current_status = status_unsafe();
+    return current_status == connected || current_status == shutdown_write;
+}
+
+bool tcp::writable_unsafe() {
+    auto current_status = status_unsafe();
+    return current_status == connected || current_status == peer_shutdown_write;
+}
+
+void tcp::mark_invalid() {
+    __status.store(invalid, std::memory_order_relaxed);
+}
+
+void tcp::set_readable(bool _readable) {
+    tcp_status current_status = status();
+    tcp_status next_status = current_status;
+    bool success;
+    do {
+        switch (current_status) {
+            case initializing:
+            case connecting:
+                if (_readable) {
+                    next_status = connected;
+                }
+                break;
+            case connected:
+                if (!_readable) {
+                    next_status = peer_shutdown_write;
+                    //we add this because currently we don't use the shutdown api with read, the behaviour is strange!
+                    log.warn("Try to mark a connected tcp instance %s to unreadable!", descriptor().c_str());
+                }
+                break;
+            case peer_shutdown_write:
+                if (_readable) {
+                    next_status = connected;
+                    log.warn("Try to mark an unreadable tcp instance %s to connected!", descriptor().c_str());
+                }
+                break;
+            case shutdown_write:
+                if (!_readable) {
+                    next_status = closed;
+                }
+        }
+        success = __status.compare_exchange_strong(current_status, next_status, std::memory_order_relaxed,
+                                                   std::memory_order_relaxed);
+    } while (!success);
+}
+
+
+void tcp::set_writable(bool _writable) {
+    tcp_status current_status = status();
+    tcp_status next_status = current_status;
+    bool success;
+    do {
+        switch (current_status) {
+            case initializing:
+            case connecting:
+                if (_writable) {
+                    next_status = connected;
+                }
+                break;
+            case connected:
+                if (!_writable) {
+                    next_status = shutdown_write;
+                }
+                break;
+            case peer_shutdown_write:
+                if (!_writable) {
+                    next_status = closed;
+                }
+                break;
+            case shutdown_write:
+                if (_writable) {
+                    next_status = connected;
+                    log.warn("Try to mark an un-writable tcp instance %s to writable!", descriptor().c_str());
+                }
+        }
+        success = __status.compare_exchange_strong(current_status, next_status, std::memory_order_relaxed,
+                                                   std::memory_order_relaxed);
+    } while (!success);
 }
 
 

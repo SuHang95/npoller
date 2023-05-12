@@ -58,7 +58,7 @@ void event_processor::close() {
 
 event_processor::~event_processor() {
     status_code temp_st = status.load(std::memory_order_relaxed);
-    if (temp_st != working) {
+    if (temp_st == stop_work || temp_st == closed) {
         delete[]event_buff;
         return;
     }
@@ -111,7 +111,7 @@ bool event_processor::add_io(std::shared_ptr<io> _io) throw() {
     }
     if (epoll_ctl(epfd, EPOLL_CTL_ADD, fd, &ev) == -1) {
         if (errno == EBADF) {
-            _io->set_valid(false);
+            _io->mark_invalid();
             log.warn("An invalid file descriptor %d was"
                      "tried to add in an Epoll instance %d", fd, epfd);
             return false;

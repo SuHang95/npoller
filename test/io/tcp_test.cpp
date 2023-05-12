@@ -48,59 +48,41 @@ private:
 };
 
 
+void accept_test() {
+    logger _log("accept_test", logger::DEBUG, true);
+    event_processor processor(_log);
+    io_factory factory(&processor);
+
+    auto acceptor_future = factory.create_io_async<tcp_acceptor>(_log, l_port);
+    assert(acceptor_future.get() != nullptr);
+    pause();
+}
+
+
+void send_test() {
+    logger _log("send_test", logger::DEBUG, true);
+    event_processor processor(_log);
+    io_factory factory(&processor);
+    for (size_t i = 0; i < 1000; i++) {
+        factory.create_tcp_async("localhost",l_port,_log);
+    }
+}
+
+
 int main() {
-    pid_t fpid; //fpid表示fork函数返回的值
+    pid_t fpid; //fpid represents the return value of fork function
     int count = 0;
     fpid = fork();
     if (fpid < 0) {
         printf("error in fork!");
     } else if (fpid == 0) {
-        printf("i am the child process, my process id is %d\n", getpid());
+        printf("I am the child process, my process id is %d\n", getpid());
         count++;
+        accept_test();
     } else {
-        printf("i am the parent process, my process id is %d\n", getpid());
+        printf("I am the parent process, my process id is %d\n", getpid());
         count++;
+        send_test();
     }
     printf("count is: %d\n", count);
-}
-
-void accept_test() {
-    logger log("acceptLog", logger::DEBUG, true);
-    event_processor processor1(log), processor2(log);
-    connection_pool pool1, pool2;
-
-    int listen_fd = socket(AF_INET, SOCK_STREAM, 0);
-    sockaddr_in address;
-    socklen_t len;
-
-
-    address.sin_family = AF_INET;
-    address.sin_addr.s_addr = htonl(INADDR_ANY);
-    address.sin_port = htons(l_port);
-
-    int ret = bind(listen_fd, (struct sockaddr *) &address, sizeof(address));
-
-    assert(ret >= 0);
-    sockaddr_in in_addr;
-
-    ret = listen(listen_fd, 10000);
-    assert(ret >= 0);
-
-    while (true) {
-        io::io_type type{0, 1};
-        std::shared_ptr<read_op> op = std::make_shared<read_op>(log);
-
-        std::function<void(std::shared_ptr<tcp>)> callback = [=](std::shared_ptr<tcp> io_ptr) {
-            (*io_ptr).do_register(op);
-        };
-
-        int fd = ::accept(listen_fd, (sockaddr *) &in_addr, &len);
-        processor1.get_factory().create_io_with_callback<tcp>(callback, 1, tcp::tcp_status::connected,
-                                                              processor1.get_logger());
-    }
-}
-
-
-void send_test() {
-
 }

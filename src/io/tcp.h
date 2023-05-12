@@ -18,18 +18,17 @@ public:
         initializing = 0,
         connecting = 1,
         connected = 2,
-        // peer close or shutdown write or close() or we shutdown read the socket
+        // peer close or shutdown write or close() or we shut down read the socket
         peer_shutdown_write = 3,
         // we have shutdown write the connection
         shutdown_write = 4,
-        closed = 5
+        closed = 5,
+        invalid = 6
     };
 
     tcp(const this_is_private &, int, tcp_status, const logger &);
 
-    tcp(const this_is_private &, const logger &_log, const char *addr, unsigned short int port);
-
-    tcp(const this_is_private &, const logger &_log, in_addr_t addr = INADDR_ANY, unsigned short int port = 0);
+    tcp(const this_is_private &, const logger &_log);
 
     //register the event
     //virtual bool register(io_op *);
@@ -45,20 +44,41 @@ protected:
 
     void connect(const char *addr, unsigned short int port);
 
-    //only used by first constructor,which we don't know addr
-    void set_addr_and_test();
+    void reconnect();
 
-    virtual bool process_event(::epoll_event &);
-
-    virtual bool get_event(epoll_event &ev);
-
-    virtual void direct_read();
-
-    virtual void direct_write();
+    inline void connect_complete();
 
     inline void handle_connect_result(bool is_connected);
 
-    void reconnect();
+    //only used by first constructor,which we don't know addr
+    void set_addr_and_test();
+
+    bool process_event(::epoll_event &) override;
+
+    bool get_event(epoll_event &ev) override;
+
+    void direct_read() override;
+
+    void direct_write() override;
+
+    bool valid_safe() override;
+
+    bool readable_safe() override;
+
+    bool writable_safe() override;
+
+    void set_writable(bool) override;
+
+    void set_readable(bool) override;
+
+    bool valid_unsafe() override;
+
+    bool readable_unsafe() override;
+
+    bool writable_unsafe() override;
+
+    void mark_invalid() override;
+
 
     //indicate the peer's address and port
     sockaddr_in address;
@@ -77,8 +97,6 @@ protected:
     inline sockaddr_in make_sockaddr_in(const char *addr, int port);
 
     inline void internal_close();
-
-    inline void prepare_close();
 
     static inline io::io_type get_io_type(tcp_status _status);
 
@@ -137,6 +155,9 @@ inline tcp::tcp_status tcp::status_unsafe() {
     return *(reinterpret_cast<tcp_status *>(&__status));
 }
 
+inline std::string tcp::descriptor() const {
+    return fd + ":" + time_addr_str;
+}
 
 inline tcp::tcp_status tcp::status() const {
     return __status.load(std::memory_order_relaxed);
@@ -149,15 +170,6 @@ inline void tcp::set_status(tcp::tcp_status _status) {
 void tcp::internal_close() {
     ::close(fd);
     set_status(closed);
-    set_valid(false);
-}
-
-inline void tcp::prepare_close() {
-    if (status() != closed) {
-        port = 0;
-        set_writable(false);
-        set_readable(false);
-    }
 }
 
 inline void tcp::set_connected_handler(std::packaged_task<std::shared_ptr<tcp>(bool)> *handler) {
@@ -171,4 +183,12 @@ inline void tcp::handle_connect_result(bool is_connected) {
         connected_handler = nullptr;
     }
 }
+
+inline void tcp::connect_complete() {
+    set_status(connected);
+    set_write_busy(false);
+    support_epollrdhup = true;
+    handle_connect_result(true);
+}
+
 #endif

@@ -43,7 +43,7 @@ void io::update_manager(event_processor *__manager) {
 
 void io::mark_invalid() {
     update_manager(nullptr);
-    set_valid(false);
+    valid.store(false, std::memory_order_relaxed);
     set_readable(false);
     set_writable(false);
 }
@@ -108,7 +108,7 @@ bool io::get_event(epoll_event &ev) {
 //read start with the end
 void io::direct_read() {
     if (!valid_unsafe() || !readable_unsafe()) {
-        log.debug("An invalid or can't read io was try to read!");
+        log.debug("Attempt reading an invalid or unreadable io is !");
         return;
     }
 #ifdef _debug
@@ -118,7 +118,7 @@ void io::direct_read() {
     char *read_buffer_last_block_ptr = nullptr;
     size_t can_read_bytes = 0;
     int retry_times = 0;
-    while (1) {
+    while (true) {
         if ((read_buffer.end()) < (read_buffer._buffer().size() * DEFAULT_SIZE)) {
             can_read_bytes = DEFAULT_SIZE - (read_buffer.end() % DEFAULT_SIZE);
             read_buffer_last_block_ptr = read_buffer._buffer()[read_buffer.end() / DEFAULT_SIZE];
@@ -144,18 +144,16 @@ void io::direct_read() {
                 if(read_buffer_lastblock_ptr==nullptr)
                     throw std::logic_error("Wrong pointor!");
 #endif
-                log.error("Read io %d with %lu fail!", fd,
-                          reinterpret_cast<std::size_t>(read_buffer_last_block_ptr));
-
-                set_readable(false);
+                log.error("buf %lu is outside your accessible address space! fd:%d.",
+                          reinterpret_cast<std::size_t>(read_buffer_last_block_ptr), fd);
                 break;
             } else if (errno == EBADF) {
                 //!!!Be Attention!!!
                 mark_invalid();
-                log.error("Read io %d fail!", fd);
+                log.error("Illegal read attempt to an invalid fd:%d!", fd);
                 break;
             } else {
-                log.error("Read %zd bytes from file descriptor %d fail!", can_read_bytes, fd);
+                log.error("Read %zd bytes from file descriptor %d fail,%s!", can_read_bytes, fd, strerror(errno));
                 break;
             }
         } else if (ret == 0) {
@@ -306,19 +304,7 @@ void io::process_read() {
 }
 
 void io::clean_read() {
-    //clean the io event from read list
-    while (!read_list.empty()) {
-        std::shared_ptr<io_op> event;
-        if (!read_list.try_pop(event)) {
-            continue;
-        }
-
-        if (event->process(this->read_buffer)) {
-            event->notify(io_op::Done);
-        } else {
-            event->notify(io_op::IOError);
-        }
-    }
+    process_read();
 }
 
 
