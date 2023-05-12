@@ -9,7 +9,7 @@
 #include<exception>
 
 
-logger log("buffertest",logger::INFO);
+logger _log("buffertest", logger::INFO);
 
 std::atomic<int> threadnum;
 std::mutex mutex_for_queue;
@@ -53,9 +53,9 @@ int main() {
 	testbuff.push_back_n(_buff, (0x7521) * sizeof(size_t));
 	delete _buff;
 
-	log.info("push_back_n %lu number,now begin=%lu,last=%lu\n,size=%lu,bufferinfo:%s",
-		0x7521, __test_get_begin(testbuff),
-			  __test_get_last(testbuff),testbuff.size(),
+	_log.info("push_back_n %lu number,now begin=%lu,last=%lu\n,size=%lu,bufferinfo:%s",
+              0x7521, __test_get_begin(testbuff),
+              __test_get_last(testbuff), testbuff.size(),
               testbuff.test_info().c_str());
 	std::thread newthread(test, testbuff);
 	newthread.detach();
@@ -90,23 +90,23 @@ inline void datatest(io_buffer testbuff){
 	mutex_for_queue.lock();
 	if (rand() % 4 == 0) {
 		if (testbuff.size() != 0){
-			log.info("before pop_front_n,now begin=%lu,last=%lu,size=%lu"
+			_log.info("before pop_front_n,now begin=%lu,last=%lu,size=%lu"
 				"buffer_info:%s", __test_get_begin(testbuff), __test_get_last(testbuff),
-				testbuff.size(), testbuff.test_info().c_str());
+                      testbuff.size(), testbuff.test_info().c_str());
 
 			size_t pop_front_size=((size_t)rand()) % testbuffsize;
 			testbuff.pop_front_n(pop_front_size * sizeof(size_t));
 
-			log.info("pop_front_n %lu number,now begin=%lu,last=%lu,size=%lu"
-				"buffer_info:%s",pop_front_size, __test_get_begin(testbuff),
-					  __test_get_last(testbuff),testbuff.size(), testbuff.test_info().c_str());
+			_log.info("pop_front_n %lu number,now begin=%lu,last=%lu,size=%lu"
+				"buffer_info:%s", pop_front_size, __test_get_begin(testbuff),
+                      __test_get_last(testbuff), testbuff.size(), testbuff.test_info().c_str());
 		}
 	}
 	else if (rand() % 4 == 1) {
 		if (testbuff.size() != 0) {
-			log.info("before push_front_n,now begin=%lu,last=%lu,size=%lu,"
+			_log.info("before push_front_n,now begin=%lu,last=%lu,size=%lu,"
 				"buffer_info:%s", __test_get_begin(testbuff), __test_get_last(testbuff),
-				testbuff.size(),testbuff.test_info().c_str());
+                      testbuff.size(), testbuff.test_info().c_str());
 
 			size_t begin= __test_get_begin(testbuff);
 			size_t push_front_size = ((size_t)rand()) % testbuffsize;
@@ -119,12 +119,12 @@ inline void datatest(io_buffer testbuff){
 			testbuff.push_front_n((char *)_buff, push_front_size * sizeof(size_t));
 			delete _buff;
 
-			log.info("push_front_n %lu number,now begin=%lu,last=%lu,size=%lu,"
-				"buffer_info:%s",push_front_size, __test_get_begin(testbuff),
-					  __test_get_last(testbuff),testbuff.size(), testbuff.test_info().c_str());
+			_log.info("push_front_n %lu number,now begin=%lu,last=%lu,size=%lu,"
+				"buffer_info:%s", push_front_size, __test_get_begin(testbuff),
+                      __test_get_last(testbuff), testbuff.size(), testbuff.test_info().c_str());
 		}
 		else {
-			log.info("Now the testbuff is null!");
+			_log.info("Now the testbuff is null!");
 
 			size_t push_front_size = ((size_t)rand()) % testbuffsize;
 			size_t* _buff = new size_t[push_front_size];
@@ -135,30 +135,30 @@ inline void datatest(io_buffer testbuff){
 			testbuff.push_front_n((char *)_buff, push_front_size * sizeof(size_t));
 			delete _buff;
 
-			log.info("push_front_n %lu number,now begin=%lu,last=%lu,size=%lu,"
-				"buffer_info:%s",push_front_size, __test_get_begin(testbuff),
-					  __test_get_last(testbuff),testbuff.size(), testbuff.test_info().c_str());
+			_log.info("push_front_n %lu number,now begin=%lu,last=%lu,size=%lu,"
+				"buffer_info:%s", push_front_size, __test_get_begin(testbuff),
+                      __test_get_last(testbuff), testbuff.size(), testbuff.test_info().c_str());
 		}
 	}
 	else if (rand() % 4 == 2) {
 		if (testbuff.size() != 0){
-			log.info("before pop_back_n,now begin=%lu,last=%lu,size=%lu,"
+			_log.info("before pop_back_n,now begin=%lu,last=%lu,size=%lu,"
 				"buffer_info:%s", __test_get_begin(testbuff), __test_get_last(testbuff),
-				testbuff.size(), testbuff.test_info().c_str());
+                      testbuff.size(), testbuff.test_info().c_str());
 
 			size_t pop_back_size = ((size_t)rand()) % testbuffsize;
 			testbuff.pop_back_n(pop_back_size*sizeof(size_t));
 
-			log.info("pop_back_n %lu number,now begin=%lu,last=%lu\n,size=%lu,"
-				"buffer_info:%s",pop_back_size, __test_get_begin(testbuff),
-					  __test_get_last(testbuff),testbuff.size(), testbuff.test_info().c_str());
+			_log.info("pop_back_n %lu number,now begin=%lu,last=%lu\n,size=%lu,"
+				"buffer_info:%s", pop_back_size, __test_get_begin(testbuff),
+                      __test_get_last(testbuff), testbuff.size(), testbuff.test_info().c_str());
 		}
 	}
 	else {
 		if (testbuff.size() != 0) {
-			log.info("before push_back_n,now begin=%lu,last=%lu,size=%lu,"
+			_log.info("before push_back_n,now begin=%lu,last=%lu,size=%lu,"
 				"buffer_info:%s", __test_get_begin(testbuff), __test_get_last(testbuff),
-				testbuff.size(), testbuff.test_info().c_str());
+                      testbuff.size(), testbuff.test_info().c_str());
 
 			size_t last= __test_get_last(testbuff);
 			size_t push_back_size = ((size_t)rand()) % testbuffsize;
@@ -169,12 +169,12 @@ inline void datatest(io_buffer testbuff){
 			testbuff.push_back_n((char *)_buff, push_back_size * sizeof(size_t));
 			delete _buff;
 
-			log.info("push_back_n %lu number,now begin=%lu,last=%lu\n,size=%lu,"
-				"buffer_info:%s",push_back_size, __test_get_begin(testbuff),
-					  __test_get_last(testbuff),testbuff.size(), testbuff.test_info().c_str());
+			_log.info("push_back_n %lu number,now begin=%lu,last=%lu\n,size=%lu,"
+				"buffer_info:%s", push_back_size, __test_get_begin(testbuff),
+                      __test_get_last(testbuff), testbuff.size(), testbuff.test_info().c_str());
 		}
 		else {
-			log.info("Now the testbuff is null!");
+			_log.info("Now the testbuff is null!");
 
 			size_t push_back_size = ((size_t)rand()) % testbuffsize;
 			size_t *_buff = new size_t[push_back_size];
@@ -185,9 +185,9 @@ inline void datatest(io_buffer testbuff){
 			testbuff.push_back_n((char *)_buff, push_back_size * sizeof(size_t));
 			delete _buff;
 
-			log.info("push_back_n %lu number,now begin=%lu,last=%lu,size=%lu,"
-				"buffer_info:%s",push_back_size, __test_get_begin(testbuff),
-					  __test_get_last(testbuff),testbuff.size(), testbuff.test_info().c_str());
+			_log.info("push_back_n %lu number,now begin=%lu,last=%lu,size=%lu,"
+				"buffer_info:%s", push_back_size, __test_get_begin(testbuff),
+                      __test_get_last(testbuff), testbuff.size(), testbuff.test_info().c_str());
 		}
 	}
 	mutex_for_queue.unlock();

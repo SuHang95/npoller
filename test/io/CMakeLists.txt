@@ -24,7 +24,8 @@ add_executable(tcp_test
         ${MODULE_SOURCE_DIR}/tcp_acceptor.cpp
         ${BUFFER_SOURCE_DIR}/io_buffer.cpp
         ${SPINLOCK_SOURCE_DIR}/spin_lock.cpp
-        ${LOGGER_SOURCE_DIR}/simple_logger.cpp)
+        ${LOGGER_SOURCE_DIR}/simple_logger.cpp
+        ${LOGGER_SOURCE_DIR}/logger.cpp)
 
 
 

@@ -26,7 +26,6 @@
 #include<functional>
 #include<future>
 
-/*the header I write for log*/
 #include <sulog/logger.h>
 #include "task.h"
 #include "internal_task.h"

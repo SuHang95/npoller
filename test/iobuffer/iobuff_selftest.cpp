@@ -10,7 +10,7 @@
 #define testbuffsize 69128
 std::atomic<int> threadnum(100);
 std::mutex mutex_for_queue;
-logger log("IoBufferTestLog",logger::INFO);
+logger _log("IoBufferTestLog", logger::INFO);
 
 inline size_t __test_get_begin(io_buffer &testbuff){
 	if(testbuff.size()==0)
@@ -58,25 +58,25 @@ inline void __test_print(io_buffer& testbuff){
 void datatest(io_buffer testbuff){
 	srand(time(0));
 	pid_t tid=syscall(SYS_gettid);
-	log.debug("thread %d require to get the lock mutex_for_queue!",tid);
+	_log.debug("thread %d require to get the lock mutex_for_queue!", tid);
 	mutex_for_queue.lock();
-    log.debug("thread %d have got the lock mutex_for_queue!",tid);
+    _log.debug("thread %d have got the lock mutex_for_queue!", tid);
 
-	log.info("before pop_back_to_other_front_n,now begin=%zd,last=%zd,size=%zd",
-			  __test_get_begin(testbuff), __test_get_last(testbuff),testbuff.size());
+	_log.info("before pop_back_to_other_front_n,now begin=%zd,last=%zd,size=%zd",
+              __test_get_begin(testbuff), __test_get_last(testbuff), testbuff.size());
 
 
 	io_buffer other=testbuff;
 	size_t pop_size = ((size_t)rand()) % testbuffsize;
 	testbuff.pop_back_to_other_front_n(other,pop_size*sizeof(size_t));
 
-	log.info("after pop_back_to_other_front_n %zd bytes,now begin=%zd,last=%zd,size=%zd",
+	_log.info("after pop_back_to_other_front_n %zd bytes,now begin=%zd,last=%zd,size=%zd",
 		pop_size*sizeof(size_t), __test_get_begin(testbuff),
-			  __test_get_last(testbuff),testbuff.size());
+              __test_get_last(testbuff), testbuff.size());
 
 
 	mutex_for_queue.unlock();
-    log.debug("thread %d release the lock mutex_for_queue!",tid);
+    _log.debug("thread %d release the lock mutex_for_queue!", tid);
 }
 void test(io_buffer testbuff);
 void test1(io_buffer testbuff) {
@@ -88,7 +88,7 @@ void test1(io_buffer testbuff) {
 	}
 	catch(std::exception& ex){
 		std::cout<<ex.what()<<std::endl;
-		log.info("An exception catch,which is %s!",ex.what());
+		_log.info("An exception catch,which is %s!", ex.what());
 		threadnum.store(0);
 	}
 	datatest(testbuff);
@@ -104,7 +104,7 @@ void test(io_buffer testbuff) {
 	}
 	catch(std::exception& ex){
 		std::cout<<ex.what()<<std::endl;
-		log.info("An exception catch,which is %s!",ex.what());
+		_log.info("An exception catch,which is %s!", ex.what());
 		threadnum.store(0);
 	}
 	datatest(testbuff);

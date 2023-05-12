@@ -9,7 +9,7 @@
 #define testbuffsize 69128
 std::atomic<int> threadnum(100);
 std::mutex mutex_for_queue;
-logger log("IoBufferTestLog",logger::INFO);
+logger _log("IoBufferTestLog", logger::INFO);
 
 inline size_t __test_get_begin(io_buffer &testbuff){
 	if(testbuff.size()==0)
@@ -58,17 +58,17 @@ void datatest(io_buffer testbuff){
 	srand(time(0));
 	mutex_for_queue.lock();
 
-	log.info("before pop_back_to_other_front_n,now begin=%zd,last=%zd,size=%zd",
-			  __test_get_begin(testbuff), __test_get_last(testbuff),testbuff.size());
+	_log.info("before pop_back_to_other_front_n,now begin=%zd,last=%zd,size=%zd",
+              __test_get_begin(testbuff), __test_get_last(testbuff), testbuff.size());
 
 	
 	io_buffer other=testbuff;
 	size_t pop_size = ((size_t)rand()) % testbuffsize;
 	testbuff.pop_front_to_other_back_n(other,pop_size*sizeof(size_t));
 
-	log.info("after pop_back_to_other_front_n %zd bytes,now begin=%zd,last=%zd,size=%zd",
+	_log.info("after pop_back_to_other_front_n %zd bytes,now begin=%zd,last=%zd,size=%zd",
 		pop_size*sizeof(size_t), __test_get_begin(testbuff),
-			  __test_get_last(testbuff),testbuff.size());
+              __test_get_last(testbuff), testbuff.size());
 
 
 	mutex_for_queue.unlock();

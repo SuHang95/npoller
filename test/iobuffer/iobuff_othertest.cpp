@@ -81,10 +81,10 @@ void data_other_test(std::array<io_buffer, array_size> buff_array, logger log,
     for (int i = 0; i < array_size; i++) {
         size_t next_index = (index + array_size + (incr ? 1 : -1)) % array_size;
 
-        /*log.print("Before %s:buff array[%d] begin=%zd,last=%zd,size=%zd", test_info.c_str(),
+        /*_log.print("Before %s:buff array[%d] begin=%zd,last=%zd,size=%zd", test_info.c_str(),
                   index, __test_get_begin(buff_array[index]),
                   __test_get_last(buff_array[index]), buff_array[index].size());
-        log.print("Before %s:buff array[%d] begin=%zd,last=%zd,size=%zd", test_info.c_str(),
+        _log.print("Before %s:buff array[%d] begin=%zd,last=%zd,size=%zd", test_info.c_str(),
                   next_index, __test_get_begin(buff_array[next_index]),
                   __test_get_last(buff_array[next_index]), buff_array[next_index].size());*/
 
@@ -92,11 +92,11 @@ void data_other_test(std::array<io_buffer, array_size> buff_array, logger log,
         (buff_array[index].*f)(buff_array[next_index],
                                pop_size * sizeof(size_t));
 
-        /*log.print("%s %zd bytes!,%zd num", test_info.c_str(), pop_size * sizeof(size_t), pop_size);
-        log.print("After %s:buff array[%d] begin=%zd,last=%zd,size=%zd", test_info.c_str(),
+        /*_log.print("%s %zd bytes!,%zd num", test_info.c_str(), pop_size * sizeof(size_t), pop_size);
+        _log.print("After %s:buff array[%d] begin=%zd,last=%zd,size=%zd", test_info.c_str(),
                   index, __test_get_begin(buff_array[index]),
                   __test_get_last(buff_array[index]), buff_array[index].size());
-        log.print("After %s:buff array[%d] begin=%zd,last=%zd,size=%zd\n", test_info.c_str(),
+        _log.print("After %s:buff array[%d] begin=%zd,last=%zd,size=%zd\n", test_info.c_str(),
                   next_index, __test_get_begin(buff_array[next_index]),
                   __test_get_last(buff_array[next_index]), buff_array[next_index].size());*/
 
@@ -117,15 +117,15 @@ void data_self_test(io_buffer buff, logger log,
     std::uniform_int_distribution<size_t> m(0, 0x10000);
 
     for (int i = 0; i < 100; i++) {
-        /*log.print("Before %s:buff begin=%zd,last=%zd,size=%zd", test_info.c_str(),
+        /*_log.print("Before %s:buff begin=%zd,last=%zd,size=%zd", test_info.c_str(),
                   __test_get_begin(buff), __test_get_last(buff), buff.size());*/
 
         size_t pop_size = m(gen) % test_buff_size;
         (buff.*f)(buff, pop_size * sizeof(size_t));
 
-        /*log.print("%s %zd bytes!,%zd num", test_info.c_str(), pop_size * sizeof(size_t), pop_size);
+        /*_log.print("%s %zd bytes!,%zd num", test_info.c_str(), pop_size * sizeof(size_t), pop_size);
 
-        log.print("After %s:buff begin=%zd,last=%zd,size=%zd\n", test_info.c_str(),
+        _log.print("After %s:buff begin=%zd,last=%zd,size=%zd\n", test_info.c_str(),
                   __test_get_begin(buff), __test_get_last(buff), buff.size());*/
 
     }
