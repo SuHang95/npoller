@@ -28,7 +28,6 @@ public:
 
     virtual void notify(result_type result) {
         if (result == Done) {
-
             return;
         }
     }
@@ -49,7 +48,7 @@ private:
 
 
 void accept_test() {
-    logger _log("accept_test", logger::DEBUG, true);
+    logger _log("accept_test", logger::DEBUG, false);
     event_processor processor(_log);
     io_factory factory(&processor);
 
@@ -60,11 +59,11 @@ void accept_test() {
 
 
 void send_test() {
-    logger _log("send_test", logger::DEBUG, true);
+    logger _log("send_test", logger::DEBUG, false);
     event_processor processor(_log);
     io_factory factory(&processor);
     for (size_t i = 0; i < 1000; i++) {
-        factory.create_tcp_async("127.0.0.1",l_port,_log);
+        factory.create_io_async<tcp>("127.0.0.1", l_port, _log);
     }
     pause();
 }
@@ -79,11 +78,11 @@ int main() {
     } else if (fpid == 0) {
         printf("I am the child process, my process id is %d\n", getpid());
         count++;
-        send_test();
+        accept_test();
     } else {
         printf("I am the parent process, my process id is %d\n", getpid());
         count++;
-        accept_test();
+        send_test();
     }
     printf("count is: %d\n", count);
 }

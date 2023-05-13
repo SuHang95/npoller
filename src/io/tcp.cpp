@@ -34,7 +34,7 @@ void tcp::connect(const char *__addr, unsigned short int __port) {
     }
     do {
         need_retry = false;
-        ret = ::connect(fd, (sockaddr *) &other, other_len);
+        ret = ::connect(fd, (sockaddr * ) & other, other_len);
         if (ret < 0) {
             //actually, most situation it will return EINPROGRESS
             if (errno == EINPROGRESS) {
@@ -66,9 +66,13 @@ void tcp::set_addr_and_test() {
     struct sockaddr_in local;
 
     socklen_t size = sizeof(sockaddr_in);
-    if (::getpeername(fd, (sockaddr *) &peer, &size) < 0) {
-        if (errno == EBADF || errno == ENOTSOCK || errno == ENOTCONN) {
-            //for ENOTCONN,we don't know peer address,also make this fd invalid
+    if (::getpeername(fd, (sockaddr * ) & peer, &size) < 0) {
+        if (errno == EBADF || errno == ENOTSOCK) {
+            mark_invalid();
+            return;
+        } else if (errno == ENOTSOCK) {
+            log.error("Query tcp peer name fail, fd:%d not socket!", fd);
+            close();
             mark_invalid();
             return;
         } else {
@@ -77,14 +81,15 @@ void tcp::set_addr_and_test() {
         }
     }
     std::string peer_name = std::string(inet_ntoa(peer.sin_addr)) +
-            ":" + std::to_string(ntohs(peer.sin_port));
+                            ":" + std::to_string(ntohs(peer.sin_port));
 
-    if (::getpeername(fd, (sockaddr *) &local, &size) < 0) {
+    size = sizeof(sockaddr_in);
+    if (::getsockname(fd, (sockaddr * ) & local, &size) < 0) {
         log.error("Query tcp local addr fail:%s", strerror(errno));
         return;
     }
-    std::string local_name = std::string(inet_ntoa(local.sin_addr))+":" +
-            std::to_string(ntohs(local.sin_port));
+    std::string local_name = std::string(inet_ntoa(local.sin_addr)) + ":" +
+                             std::to_string(ntohs(local.sin_port));
 
     std::string time = log.time(log_time_strategy::millisecond);
 

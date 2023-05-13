@@ -124,7 +124,6 @@ protected:
     std::atomic<std::thread::id> worker_id;
 
     //used only for init and none-synchronized api
-
     tbb::concurrent_queue<std::function<void()>> task_list;
 
     std::deque<std::pair<std::function<void()>,int>> local_task_list;

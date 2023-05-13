@@ -242,7 +242,7 @@ void event_processor::process() {
     bool close_flag = false;
     int task_index = 0;
 
-    while (1) {
+    while (true) {
 
         status.store(ready_waiting, std::memory_order_relaxed);
 

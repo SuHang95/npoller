@@ -29,8 +29,9 @@ public:
     template<typename _Tp, typename... _Args>
     void create_io_with_callback(std::function<void(std::shared_ptr<_Tp>)> &callback, _Args &&...);
 
-    template<typename... _Args>
-    std::future<std::shared_ptr<tcp>> create_tcp_async(const char *addr, unsigned short int port, _Args &&... args);
+    template<typename _Tp, typename... _Args>
+    requires std::same_as<_Tp, tcp>
+    std::future<std::shared_ptr<_Tp>> create_io_async(const char *addr, unsigned short int port, _Args &&... args);
 
 private:
 
@@ -119,39 +120,40 @@ std::shared_ptr<_Tp> io_factory::create_io(_Args &&... __args) {
     }
 }
 
-template<typename... _Args>
-std::future<std::shared_ptr<tcp>>
-io_factory::create_tcp_async(const char *addr, unsigned short int port, _Args &&... args) {
-    std::promise<std::shared_ptr<tcp>> connect_promise;
+template<typename _Tp, typename... _Args>
+requires std::same_as<_Tp,tcp>
+std::future<std::shared_ptr<_Tp>>
+io_factory::create_io_async(const char *addr, unsigned short int port, _Args &&... args) {
+    std::promise<std::shared_ptr<_Tp>> connect_promise;
 
     //this future is for connected_handler use, not return value
-    std::future<std::shared_ptr<tcp>> connect_future = connect_promise.get_future();
+    std::future<std::shared_ptr<_Tp>> connect_future = connect_promise.get_future();
 
     //we want this future return when connect success, tcp instance initialization and connect call return will not
     //return the future.
 
     //We need this handler ran after tcp connected, related code is in tcp.cpp
-    std::packaged_task<std::shared_ptr<tcp>(bool)> *connected_handler =
-            new std::packaged_task<std::shared_ptr<tcp>(bool)>(
-                    [_connect_future = std::move(connect_future)](bool successful) mutable -> std::shared_ptr<tcp> {
-                        return successful ? _connect_future.get() : std::shared_ptr<tcp>();
+    std::packaged_task<std::shared_ptr<_Tp>(bool)> *connected_handler =
+            new std::packaged_task<std::shared_ptr<_Tp>(bool)>(
+                    [_connect_future = std::move(connect_future)](bool successful) mutable -> std::shared_ptr<_Tp> {
+                        return successful ? _connect_future.get() : std::shared_ptr<_Tp>();
                     }
             );
 
     //
-    std::future<std::shared_ptr<tcp>> future = connected_handler->get_future();
+    std::future<std::shared_ptr<_Tp>> future = connected_handler->get_future();
 
     std::shared_ptr<std::packaged_task<void()>> connect_task =
             std::make_shared<std::packaged_task<void()>>(
                     [this, addr, port, connected_handler, _connect_promise = std::move(connect_promise),
                             ..._args = std::forward<_Args>(args)]() mutable {
-                        std::shared_ptr<tcp> tcp_instance = create_io_in_eventloop<tcp, _Args...>(
+                        std::shared_ptr<_Tp> instance = create_io_in_eventloop<_Tp, _Args...>(
                                 std::forward<_Args>(_args)...);
-                        _connect_promise.set_value(tcp_instance);
-                        if (tcp_instance != nullptr) {
+                        _connect_promise.set_value(instance);
+                        if (instance != nullptr) {
                             //this handler must not shared_ptr,otherwise it will cause circular reference
-                            tcp_instance->set_connected_handler(connected_handler);
-                            tcp_instance->connect(addr, port);
+                            instance->set_connected_handler(connected_handler);
+                            instance->connect(addr, port);
                         }
                     });
 

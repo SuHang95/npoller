@@ -95,7 +95,7 @@ protected:
     //local address <--> peer address @ construct time
     std::string time_addr_str;
 
-    std::atomic<tcp_status> __status;
+    std::atomic <tcp_status> __status;
 
     std::packaged_task<std::shared_ptr<tcp>(bool)> *connected_handler;
 
@@ -190,6 +190,10 @@ inline void tcp::connect_complete() {
     set_write_busy(false);
     support_epollrdhup = true;
     handle_connect_result(true);
+    if (log.is_debug_enable()) {
+        set_addr_and_test();
+        log.debug("Connection %s has connected done!", descriptor().c_str());
+    }
 }
 
 #endif
