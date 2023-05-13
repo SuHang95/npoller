@@ -63,7 +63,7 @@ public:
         return reinterpret_cast<size_t>(this);
     }
 
-    void add_task(const std::function<void()> &task);
+    void add_task(std::packaged_task<void()> &&task);
 
     logger get_logger();
 
@@ -83,14 +83,14 @@ protected:
     //file descriptor
     const int epfd;
 
-    //when the we need the epoll_wait return,the pipe_fd will be used
+    //when we need the epoll_wait return,the pipe_fd will be used
     int pipe_fd[2];
 
     logger log;
 
     void process_instant_write();
-    
-    void process_task_queue(int&);
+
+    void process_task_queue(int &);
 
     enum status_code : unsigned char {
         initializing = 0,
@@ -124,9 +124,9 @@ protected:
     std::atomic<std::thread::id> worker_id;
 
     //used only for init and none-synchronized api
-    tbb::concurrent_queue<std::function<void()>> task_list;
+    tbb::concurrent_queue<std::packaged_task<void()>> task_list;
 
-    std::deque<std::pair<std::function<void()>,int>> local_task_list;
+    std::deque<std::pair<std::function<void()>, int>> local_task_list;
 
     epoll_event *event_buff;
 

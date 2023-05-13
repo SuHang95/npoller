@@ -52,10 +52,10 @@ bool tcp_acceptor::start_accept(event_processor *processor, int queue_size) {
     }
 
     log.debug("tcp acceptor:%d has listen successfully!", fd);
-    std::shared_ptr<tcp_acceptor> this_ptr = shared_from_this();
+    std::shared_ptr<io> this_ptr = shared_from_this();
 
     log.debug("Try to add the acceptor instance %d to event processor!", fd);
-    if (!processor->add_io(std::dynamic_pointer_cast<io>(this_ptr))) {
+    if (!processor->add_io(this_ptr)) {
         return false;
     }
 

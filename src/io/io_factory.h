@@ -27,11 +27,17 @@ public:
     std::shared_ptr<_Tp> create_io(_Args &&...);
 
     template<typename _Tp, typename... _Args>
-    void create_io_with_callback(std::function<void(std::shared_ptr<_Tp>)> &callback, _Args &&...);
+    void create_io_with_callback(std::packaged_task<void(std::shared_ptr<_Tp> &&, const std::string &)> &&callback,
+                                 _Args &&...);
 
     template<typename _Tp, typename... _Args>
     requires std::same_as<_Tp, tcp>
     std::future<std::shared_ptr<_Tp>> create_io_async(const char *addr, unsigned short int port, _Args &&... args);
+
+    template<typename _Tp, typename... _Args>
+    requires std::same_as<_Tp, tcp>
+    void create_io_with_callback(std::packaged_task<void(std::shared_ptr<_Tp> &&, const std::string &)> &&callback,
+                                 const char *addr, unsigned short int port, _Args &&...args);
 
 private:
 
@@ -81,33 +87,42 @@ std::shared_ptr<_Tp> io_factory::create_io_in_eventloop(_Args &&... __args) {
 template<typename _Tp, typename... _Args>
 std::future<std::shared_ptr<_Tp>>
 io_factory::create_io_async(_Args &&... __args) {
+    std::promise<std::shared_ptr<_Tp>> creation_promise;
 
-    std::shared_ptr<std::packaged_task<std::shared_ptr<_Tp>()>> run_task =
-            std::make_shared<std::packaged_task<std::shared_ptr<_Tp>()>>(
-                    [this, ...args = (std::forward<_Args>(__args))]() mutable -> std::shared_ptr<_Tp> {
-                        return create_io_in_eventloop<_Tp>(std::forward<_Args>(args)...);
-                    });
+    std::future<std::shared_ptr<_Tp>> future = creation_promise.get_future();
+    std::packaged_task<void()>
+            run_task(
+            [this, promise = std::move(creation_promise), ...args = (std::forward<_Args>(
+                    __args))]() mutable {
+                try {
+                    promise.set_value(create_io_in_eventloop<_Tp>(std::forward<_Args>(args)...));
+                } catch (std::exception &e) {
+                    promise.set_exception(std::current_exception());
+                }
+            });
 
-    std::future<std::shared_ptr<_Tp>> future = run_task->get_future();
 
-    std::function<void()> task([=]() mutable {
-        (*run_task)();
-    });
-
-    ev_processor->add_task(task);
+    ev_processor->add_task(std::move(run_task));
 
     return std::move(future);
 }
 
 
 template<typename _Tp, typename... _Args>
-void io_factory::create_io_with_callback(std::function<void(std::shared_ptr<_Tp>)> &callback, _Args &&... __args) {
-    std::function<void()> task([this, callback, ...args = (std::forward<_Args>(__args))]() mutable {
-        std::shared_ptr<_Tp> ptr = create_io_in_eventloop<_Tp>(std::forward<_Args>(args)...);
-        callback(ptr);
-    });
+void
+io_factory::create_io_with_callback(std::packaged_task<void(std::shared_ptr<_Tp> &&, const std::string &)> &&callback,
+                                    _Args &&... __args) {
+    std::packaged_task<void()> task(
+            [this, _callback = std::move(callback), ...args = (std::forward<_Args>(__args))]() mutable {
+                std::shared_ptr<_Tp> ptr = create_io_in_eventloop<_Tp>(std::forward<_Args>(args)...);
+                if (ptr != nullptr) {
+                    _callback(std::move(ptr), std::string{});
+                } else {
 
-    ev_processor->add_task(task);
+                }
+            });
+
+    ev_processor->add_task(std::move(task));
 }
 
 template<typename _Tp, typename... _Args>
@@ -120,8 +135,28 @@ std::shared_ptr<_Tp> io_factory::create_io(_Args &&... __args) {
     }
 }
 
+
 template<typename _Tp, typename... _Args>
-requires std::same_as<_Tp,tcp>
+requires std::same_as<_Tp, tcp>
+void
+io_factory::create_io_with_callback(std::packaged_task<void(std::shared_ptr<_Tp> &&, const std::string &)> &&callback,
+                                    const char *addr, unsigned short int port, _Args &&...args) {
+    std::packaged_task<void()> connect_task(
+            [this, addr, port, _callback = std::move(callback),
+                    ..._args = std::forward<_Args>(args)]() mutable {
+                std::shared_ptr<_Tp> instance = create_io_in_eventloop<_Tp, _Args...>(
+                        std::forward<_Args>(_args)...);
+                if (instance != nullptr) {
+                    //this handler must not shared_ptr,otherwise it will cause circular reference
+                    instance->set_connect_callback(std::move(_callback));
+                    instance->connect(addr, port);
+                }
+            });
+    ev_processor->add_task(std::move(connect_task));
+}
+
+template<typename _Tp, typename... _Args>
+requires std::same_as<_Tp, tcp>
 std::future<std::shared_ptr<_Tp>>
 io_factory::create_io_async(const char *addr, unsigned short int port, _Args &&... args) {
     std::promise<std::shared_ptr<_Tp>> connect_promise;
@@ -133,37 +168,32 @@ io_factory::create_io_async(const char *addr, unsigned short int port, _Args &&.
     //return the future.
 
     //We need this handler ran after tcp connected, related code is in tcp.cpp
-    std::packaged_task<std::shared_ptr<_Tp>(bool)> *connected_handler =
-            new std::packaged_task<std::shared_ptr<_Tp>(bool)>(
-                    [_connect_future = std::move(connect_future)](bool successful) mutable -> std::shared_ptr<_Tp> {
-                        return successful ? _connect_future.get() : std::shared_ptr<_Tp>();
-                    }
-            );
+    std::packaged_task<void(std::shared_ptr<_Tp> &&, const std::string &)> callback(
+            [_promise = std::move(connect_promise)](std::shared_ptr<_Tp> &&ptr,
+                                                    const std::string &error_message) mutable {
+                if (ptr != nullptr) {
+                    _promise.set_value(std::move(ptr));
+                } else {
+                    _promise.set_exception(std::make_exception_ptr(std::runtime_error(error_message)));
+                }
+            }
+    );
 
-    //
-    std::future<std::shared_ptr<_Tp>> future = connected_handler->get_future();
+    std::packaged_task<void()> connect_task(
+            [this, addr, port, _callback=std::move(callback), _connect_promise = std::move(connect_promise),
+                    ..._args = std::forward<_Args>(args)]() mutable {
+                std::shared_ptr<_Tp> instance = create_io_in_eventloop<_Tp, _Args...>(
+                        std::forward<_Args>(_args)...);
+                _connect_promise.set_value(instance);
+                if (instance != nullptr) {
+                    //this handler must not shared_ptr,otherwise it will cause circular reference
+                    instance->set_connect_callback(std::move(_callback));
+                    instance->connect(addr, port);
+                }
+            });
+    ev_processor->add_task(std::move(connect_task));
 
-    std::shared_ptr<std::packaged_task<void()>> connect_task =
-            std::make_shared<std::packaged_task<void()>>(
-                    [this, addr, port, connected_handler, _connect_promise = std::move(connect_promise),
-                            ..._args = std::forward<_Args>(args)]() mutable {
-                        std::shared_ptr<_Tp> instance = create_io_in_eventloop<_Tp, _Args...>(
-                                std::forward<_Args>(_args)...);
-                        _connect_promise.set_value(instance);
-                        if (instance != nullptr) {
-                            //this handler must not shared_ptr,otherwise it will cause circular reference
-                            instance->set_connected_handler(connected_handler);
-                            instance->connect(addr, port);
-                        }
-                    });
-
-    std::function<void()> task([=]() mutable {
-        (*connect_task)();
-    });
-
-    ev_processor->add_task(task);
-
-    return std::move(future);
+    return connect_future;
 }
 
 #endif //NETPROCESSOR_IO_FACTORY_H

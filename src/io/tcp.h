@@ -33,12 +33,6 @@ public:
     //register the event
     //virtual bool register(io_op *);
 
-    virtual ~tcp() {
-        if (connected_handler != nullptr) {
-            delete connected_handler;
-        }
-    }
-
     void close() override;
 
     bool is_open() override;
@@ -49,14 +43,15 @@ public:
 
 protected:
 
-
     void connect(const char *addr, unsigned short int port);
 
     void reconnect();
 
-    inline void connect_complete();
+    inline void connect_success();
 
-    inline void handle_connect_result(bool is_connected);
+    inline void connect_fail();
+
+    inline void handle_connect_result(bool success, const std::string &);
 
     //only used by first constructor,which we don't know addr
     void set_addr_and_test();
@@ -95,9 +90,11 @@ protected:
     //local address <--> peer address @ construct time
     std::string time_addr_str;
 
-    std::atomic <tcp_status> __status;
+    std::atomic<tcp_status> __status;
 
-    std::packaged_task<std::shared_ptr<tcp>(bool)> *connected_handler;
+    bool has_connected_handler = false;
+
+    std::packaged_task<void(std::shared_ptr<tcp> &&pointer, const std::string &)> connect_callback;
 
     //these inline function never use lock!
     inline sockaddr_in make_sockaddr_in(in_addr_t addr, int port);
@@ -106,7 +103,8 @@ protected:
 
     static inline io::io_type get_io_type(tcp_status _status);
 
-    inline void set_connected_handler(std::packaged_task<std::shared_ptr<tcp>(bool)> *handler);
+    //this is an unsafe function, must be executed in event loop function
+    inline void set_connect_callback(std::packaged_task<void(std::shared_ptr<tcp> &&, const std::string &)> &&callback);
 
     inline tcp_status status_unsafe();
 
@@ -173,27 +171,37 @@ inline void tcp::set_status(tcp::tcp_status _status) {
     __status.store(_status, std::memory_order_relaxed);
 }
 
-inline void tcp::set_connected_handler(std::packaged_task<std::shared_ptr<tcp>(bool)> *handler) {
-    this->connected_handler = handler;
+inline void
+tcp::set_connect_callback(std::packaged_task<void(std::shared_ptr<tcp> &&, const std::string &)> &&callback) {
+    connect_callback = std::move(callback);
+    has_connected_handler = true;
 }
 
-inline void tcp::handle_connect_result(bool is_connected) {
-    if (connected_handler != nullptr) {
-        (*connected_handler)(is_connected);
-        delete connected_handler;
-        connected_handler = nullptr;
+inline void tcp::handle_connect_result(bool success, const std::string &message) {
+    if (has_connected_handler) {
+        if (success) {
+            std::shared_ptr<tcp> this_ptr = std::static_pointer_cast<tcp>(shared_from_this());
+            connect_callback(std::move(this_ptr), message);
+        } else {
+            connect_callback(nullptr, message);
+        }
+        has_connected_handler = false;
     }
 }
 
-inline void tcp::connect_complete() {
+inline void tcp::connect_success() {
     set_status(connected);
     set_write_busy(false);
     support_epollrdhup = true;
-    handle_connect_result(true);
+    handle_connect_result(true, std::string{});
     if (log.is_debug_enable()) {
         set_addr_and_test();
         log.debug("Connection %s has connected done!", descriptor().c_str());
     }
+}
+
+inline void tcp::connect_fail() {
+    handle_connect_result(false, std::string(strerror(errno)));
 }
 
 #endif

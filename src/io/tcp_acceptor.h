@@ -9,7 +9,7 @@
 
 const int default_queue_size = 1000;
 
-class tcp_acceptor : public std::enable_shared_from_this<tcp_acceptor>, public io {
+class tcp_acceptor :  public io {
 public:
     tcp_acceptor(const this_is_private &, const logger &_log, unsigned short int port, in_addr_t addr = INADDR_ANY);
 

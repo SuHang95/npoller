@@ -323,10 +323,10 @@ void event_processor::process() {
 }
 
 
-void event_processor::add_task(const std::function<void()> &task) {
+void event_processor::add_task(std::packaged_task<void()> &&task) {
     if (thread_id() != std::this_thread::get_id()) {
         task_index.fetch_add(1);
-        task_list.push(task);
+        task_list.emplace(std::move(task));
         if (this->status.load(std::memory_order_relaxed) != working) {
             unsigned char temp[1] = {task_signal};
             if (write(pipe_fd[1], temp, 1) <= 0) {
@@ -354,7 +354,7 @@ void event_processor::notify_event() {
 }
 
 void event_processor::process_task_queue(int &index) {
-    std::function<void()> task;
+    std::packaged_task<void()> task;
     while (!local_task_list.empty()) {
         if (local_task_list[0].second == index + 1) {
             local_task_list[0].first();
@@ -363,7 +363,6 @@ void event_processor::process_task_queue(int &index) {
 
             continue;
         }
-
         if (task_list.try_pop(task)) {
             task();
             index++;

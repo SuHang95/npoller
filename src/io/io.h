@@ -19,7 +19,7 @@ class event_processor;
 const int cache_line_size = 64;
 
 //the file type used by this class must support epoll and non-blocking
-class io {
+class io : public std::enable_shared_from_this<io> {
 protected:
     struct this_is_private {
         explicit inline this_is_private(int d) {}

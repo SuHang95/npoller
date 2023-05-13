@@ -34,7 +34,7 @@ void tcp::connect(const char *__addr, unsigned short int __port) {
     }
     do {
         need_retry = false;
-        ret = ::connect(fd, (sockaddr * ) & other, other_len);
+        ret = ::connect(fd, (sockaddr *) &other, other_len);
         if (ret < 0) {
             //actually, most situation it will return EINPROGRESS
             if (errno == EINPROGRESS) {
@@ -45,16 +45,17 @@ void tcp::connect(const char *__addr, unsigned short int __port) {
             } else if (errno == EALREADY) {
                 set_status(connecting);
             } else if (errno == EISCONN) {
-                connect_complete();
+                connect_success();
             } else if (errno == EINTR) {
                 need_retry = true;
             } else {
-                log.error("Try connect the %s:%d,some error occur %s!", \
+                log.debug("Try connect the %s:%d,some error occur %s!", \
                     __addr, __port, strerror(errno));
+                connect_fail();
                 tcp::close();
             }
         } else {
-            connect_complete();
+            connect_success();
             address = other;
             port = __port;
         }
@@ -66,7 +67,7 @@ void tcp::set_addr_and_test() {
     struct sockaddr_in local;
 
     socklen_t size = sizeof(sockaddr_in);
-    if (::getpeername(fd, (sockaddr * ) & peer, &size) < 0) {
+    if (::getpeername(fd, (sockaddr *) &peer, &size) < 0) {
         if (errno == EBADF || errno == ENOTSOCK) {
             mark_invalid();
             return;
@@ -84,7 +85,7 @@ void tcp::set_addr_and_test() {
                             ":" + std::to_string(ntohs(peer.sin_port));
 
     size = sizeof(sockaddr_in);
-    if (::getsockname(fd, (sockaddr * ) & local, &size) < 0) {
+    if (::getsockname(fd, (sockaddr *) &local, &size) < 0) {
         log.error("Query tcp local addr fail:%s", strerror(errno));
         return;
     }
@@ -138,8 +139,6 @@ bool tcp::process_event(::epoll_event &ev) {
             } else if (status() == connected) {
                 break;
             } else {
-                close();
-                handle_connect_result(false);
                 return false;
             }
         case connected:
@@ -267,20 +266,17 @@ void tcp::reconnect() {
             set_status(connecting);
             return;
         } else if (err == EISCONN) {
-            connect_complete();
-            return;
-        } else if (err == ENETUNREACH) {
-            log.error("Network is unreachable!");
-            this->set_status(closed);
+            connect_success();
             return;
         } else {
-            log.error("The socket pair %s connected fail %s",
-                      time_addr_str.c_str(), strerror(errno));
-            this->set_status(closed);
+            log.error("Try to connect %s.%s fail %s",
+                      inet_ntoa(address.sin_addr) ,ntohs(address.sin_port), strerror(errno));
+            connect_fail();
+            tcp::close();
             return;
         }
     } else {
-        connect_complete();
+        connect_success();
         return;
     }
 }

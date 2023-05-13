@@ -46,22 +46,19 @@ public:
         if (state == 0) {
             io::io_type type;
 
-            std::function<void(std::shared_ptr<io>)> callback = [this](std::shared_ptr<io> ptr) {
-                log.info("Get io instance, which id is:%d", ptr->id());
-                if (ptr != nullptr && ptr->do_register(std::dynamic_pointer_cast<io_op>(op))) {
-                    this->state = 1;
-                } else {
-                    this->state = 2;
-                    this->log.info("print task can not add in io out!");
-                }
-            };
-
-            //not callback mode
-            /*auto out = processor.get_factory().create_io<io>(1, type, processor.get_logger());
-            callback(out);*/
+            std::packaged_task<void(std::shared_ptr<io> &&, const std::string &)> callback(
+                    [this](std::shared_ptr<io> &&ptr, const std::string &message) {
+                        log.info("Get io instance, which id is:%d", ptr->id());
+                        if (ptr != nullptr && ptr->do_register(std::dynamic_pointer_cast<io_op>(op))) {
+                            this->state = 1;
+                        } else {
+                            this->state = 2;
+                            this->log.info("print task can not add in io out!");
+                        }
+                    });
 
             //callback mode
-            processor.get_factory().create_io_with_callback<io>(callback, 1, io::writable, false,
+            processor.get_factory().create_io_with_callback<io>(std::move(callback), 1, io::writable, false,
                                                                 processor.get_logger());
 
             return;
