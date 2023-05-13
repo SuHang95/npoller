@@ -37,7 +37,7 @@ private:
 
 class print_task : task {
 public:
-    print_task(event_processor &__processor, logger __log) :
+    print_task(event_processor *__processor, logger __log) :
             processor(__processor), log(__log) {
         op = std::make_shared<print_op>("Hello World!", dynamic_cast<task *>(this), 1);
     }
@@ -58,8 +58,8 @@ public:
                     });
 
             //callback mode
-            processor.get_factory().create_io_with_callback<io>(std::move(callback), 1, io::writable, false,
-                                                                processor.get_logger());
+            processor->get_factory().create_io_with_callback<io>(std::move(callback), 1, io::writable, false,
+                                                                processor->get_logger());
 
             return;
         }
@@ -86,7 +86,7 @@ public:
     }
 
 private:
-    event_processor &processor;
+    event_processor* processor;
     logger log;
     std::shared_ptr<io_op> op;
 };
@@ -94,7 +94,7 @@ private:
 int main() {
     logger log("logfile", logger::DEBUG, true);
     event_processor manager(log);
-    print_task hello(manager, log);
+    print_task hello(&manager, log);
     hello.run();
     pause();
     return 0;

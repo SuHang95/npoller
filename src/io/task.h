@@ -49,9 +49,9 @@ class task {
 public:
     task() : state(0) {};
 
-    task(const task &) = delete;
+    task(const task &);
 
-    task(task &&) = delete;
+    task(task &&);
 
     task &operator=(const task &) = delete;
 

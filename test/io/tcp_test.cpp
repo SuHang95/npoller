@@ -48,7 +48,7 @@ private:
 
 
 void accept_test() {
-    logger _log("accept_test", logger::DEBUG, false);
+    logger _log("accept_test", logger::DEBUG, true);
     event_processor processor(_log);
     io_factory factory(&processor);
 

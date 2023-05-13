@@ -12,7 +12,7 @@ tcp::tcp(const this_is_private &p, const logger &_log) :
         tcp(this_is_private(0), socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0), initializing, _log) {
     if (fd < 0) {
         mark_invalid();
-        log.error("Create a socket instance fail!");
+        log.error("Call socket() for fd fail!,ret:%d,%s", fd, strerror(errno));
         return;
     }
     log.debug("Create a socket instance with fd:%d", fd);
@@ -69,9 +69,6 @@ void tcp::set_addr_and_test() {
     socklen_t size = sizeof(sockaddr_in);
     if (::getpeername(fd, (sockaddr *) &peer, &size) < 0) {
         if (errno == EBADF || errno == ENOTSOCK) {
-            mark_invalid();
-            return;
-        } else if (errno == ENOTSOCK) {
             log.error("Query tcp peer name fail, fd:%d not socket!", fd);
             close();
             mark_invalid();
@@ -269,8 +266,8 @@ void tcp::reconnect() {
             connect_success();
             return;
         } else {
-            log.error("Try to connect %s.%s fail %s",
-                      inet_ntoa(address.sin_addr) ,ntohs(address.sin_port), strerror(errno));
+            log.debug("Try to connect %s.%s fail %s",
+                      inet_ntoa(address.sin_addr), ntohs(address.sin_port), strerror(errno));
             connect_fail();
             tcp::close();
             return;
@@ -295,7 +292,7 @@ void tcp::direct_read() {
     if (current_status == peer_shutdown_write) {
         log.debug("A TCP connection %d has been closed or shutdown write by peer!", fd);
     } else if (current_status == closed) {
-        log.info("A tcp connection %d will close", fd);
+        log.debug("A tcp connection %d will close", fd);
         close();
     }
 }
@@ -309,7 +306,7 @@ void tcp::direct_write() {
         if (readable_unsafe() && status() == connected) {
             set_status(shutdown_write);
         } else {
-            log.info("A tcp connection %d:%s can't read!",
+            log.debug("A tcp connection %d:%s can't read!",
                      fd, time_addr_str.c_str());
             this->close();
         }
