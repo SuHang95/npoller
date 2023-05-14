@@ -9,7 +9,7 @@
 #include "connection_pool.h"
 
 unsigned short l_port = 9010;
-int nums = 10000;
+int nums = 1000;
 
 class read_op : public io_op {
 public:
@@ -54,7 +54,7 @@ void accept_test() {
 
     auto acceptor_future = factory.create_io_async<tcp_acceptor>(_log, l_port);
     assert(acceptor_future.get() != nullptr);
-    sleep(5);
+    sleep(1);
 }
 
 

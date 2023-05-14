@@ -82,7 +82,6 @@ void tcp::set_addr_and_test() {
     }
     std::string peer_name = std::string(inet_ntoa(peer.sin_addr)) +
                             ":" + std::to_string(ntohs(peer.sin_port));
-
     size = sizeof(sockaddr_in);
     if (::getsockname(fd, (sockaddr *) &local, &size) < 0) {
         log.error("Query tcp local addr fail:%s", strerror(errno));
@@ -268,8 +267,10 @@ void tcp::reconnect() {
             connect_success();
             return;
         } else {
-            log.debug("Try to connect %s.%s fail %s",
-                      inet_ntoa(address.sin_addr), ntohs(address.sin_port), strerror(errno));
+            char ip_str[INET_ADDRSTRLEN];
+            strcpy(ip_str, inet_ntoa(address.sin_addr));
+            log.debug("Try to connect %s.%d fail %s",
+                      ip_str, ntohs(address.sin_port), strerror(errno));
             connect_fail();
             tcp::close();
             return;
@@ -361,10 +362,9 @@ void tcp::set_readable(bool _readable) {
                 }
                 break;
             case connected:
+                //TODO need to make sure logic of processing peer shutdown
                 if (!_readable) {
                     next_status = peer_shutdown_write;
-                    //we add this because currently we don't use the shutdown api with read, the behaviour is strange!
-                    log.warn("Try to mark a connected tcp instance %s to unreadable!", descriptor().c_str());
                 }
                 break;
             case peer_shutdown_write:

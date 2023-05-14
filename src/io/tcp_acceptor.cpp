@@ -26,7 +26,8 @@ bool tcp_acceptor::start_accept(event_processor *processor, int queue_size) {
         char s_addr[INET_ADDRSTRLEN];
         //we need _errno because later there will be an inet_ntop call
         int _errno = errno;
-        log.error("Bind address %d:%d fail,%s", inet_ntop(AF_INET, &(address.sin_addr), s_addr, INET_ADDRSTRLEN),
+        strcpy(s_addr, inet_ntoa(address.sin_addr));
+        log.error("Bind address %s:%d fail,%s", s_addr,
                   ntohs(address.sin_port),
                   strerror(_errno)
         );
@@ -40,10 +41,9 @@ bool tcp_acceptor::start_accept(event_processor *processor, int queue_size) {
         char s_addr[INET_ADDRSTRLEN];
         //we need _errno because later there will be an inet_ntop call
         int _errno = errno;
-        log.error("Listen address %d:%d with queue size:%d fail,%s",
-                  inet_ntop(AF_INET, &(address.sin_addr), s_addr, INET_ADDRSTRLEN),
-                  ntohs(address.sin_port), queue_size,
-                  strerror(_errno)
+        strcpy(s_addr, inet_ntoa(address.sin_addr));
+        log.error("Listen address %s:%d with queue size:%d fail,%s", s_addr,
+                  ntohs(address.sin_port), queue_size, strerror(_errno)
         );
 
         mark_invalid();
@@ -72,14 +72,16 @@ void tcp_acceptor::direct_read() {
         need_retry = false;
         int client_fd = accept(fd, (sockaddr *) &peer_address, &peer_address_len);
         if (client_fd < 0) {
+            char ip_str[INET_ADDRSTRLEN];
             switch (errno) {
                 case EBADF:
                     mark_invalid();
                     log.error("Accept on fd %d fail,%s", fd, strerror(errno));
                 case EINVAL:
                     close();
+                    strcpy(ip_str, inet_ntoa(address.sin_addr));
                     log.error("Accept on fd %d fail,%s!local address:%s, port:%d.", fd,
-                              strerror(errno), inet_ntoa(address.sin_addr), ntohs(address.sin_port));
+                              strerror(errno), ip_str, ntohs(address.sin_port));
                     return;
                 case EINTR:
                     need_retry = true;
@@ -87,8 +89,9 @@ void tcp_acceptor::direct_read() {
                 case EAGAIN:
                     return;
                 default:
+                    strcpy(ip_str, inet_ntoa(address.sin_addr));
                     log.error("Accept on fd %d fail,%s!local address:%s, port:%d.", fd,
-                              strerror(errno), inet_ntoa(address.sin_addr), ntohs(address.sin_port));
+                              strerror(errno), ip_str, ntohs(address.sin_port));
                     return;
             }
             continue;
