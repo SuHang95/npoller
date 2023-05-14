@@ -2,9 +2,11 @@
 #include"event_processor.h"
 
 tcp::tcp(const this_is_private &p, int _fd, tcp_status _status, const logger &_log) :
-        io(this_is_private(0), _fd, get_io_type(_status), true, _log), __status(_status) {
+        io(this_is_private(0), _fd, get_io_type(_status), true, true, _log), __status(_status) {
     if (_status == connected || _status == peer_shutdown_write || _status == shutdown_write) {
-        set_addr_and_test();
+        if (_log.is_debug_enable()) {
+            set_addr_and_test();
+        }
     }
 }
 
@@ -12,7 +14,7 @@ tcp::tcp(const this_is_private &p, const logger &_log) :
         tcp(this_is_private(0), socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0), initializing, _log) {
     if (fd < 0) {
         mark_invalid();
-        log.error("Call socket() for fd fail!,ret:%d,%s", fd, strerror(errno));
+        log.debug("Call socket() for fd fail!,ret:%d,%s", fd, strerror(errno));
         return;
     }
     log.debug("Create a socket instance with fd:%d", fd);
@@ -307,7 +309,7 @@ void tcp::direct_write() {
             set_status(shutdown_write);
         } else {
             log.debug("A tcp connection %d:%s can't read!",
-                     fd, time_addr_str.c_str());
+                      fd, time_addr_str.c_str());
             this->close();
         }
     }

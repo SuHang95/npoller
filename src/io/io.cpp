@@ -7,23 +7,26 @@
 
 
 io::io(const this_is_private &p, const int _fd, io_type type,
-       bool _support_epollrdhup, const logger &_log) :
+       bool _support_epollrdhup, bool nonblock, const logger &_log) :
         fd(_fd), log(_log), valid(true), manager(nullptr),
         support_epollrdhup(_support_epollrdhup) {
-    int ret = fcntl(fd, F_SETFL, O_NONBLOCK);
+    if (fd < 0) {
+        mark_invalid();
+    }
+
+    if (!nonblock) {
+        int ret = fcntl(fd, F_SETFL, O_NONBLOCK);
+
+        if (ret < 0) {
+            mark_invalid();
+            log.error("Set fd %d non-blocking error,%s", fd, strerror(errno));
+        }
+    }
 
     have_write = 0;
     set_write_busy(false);
-
-    if (ret < 0) {
-        if (errno == EBADF) {
-            mark_invalid();
-        }
-        log.error("Set fd %d non-blocking error:", fd);
-    } else {
-        set_readable(type.readable == 1);
-        set_writable(type.writable == 1);
-    }
+    set_readable(type.readable == 1);
+    set_writable(type.writable == 1);
 }
 
 

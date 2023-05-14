@@ -9,7 +9,7 @@
 const static io::io_type acceptor_type = {1, 0};
 
 tcp_acceptor::tcp_acceptor(const io::this_is_private &, const logger &_log, unsigned short int port, in_addr_t addr) :
-        io(this_is_private(0), socket(AF_INET, SOCK_STREAM, 0), acceptor_type, false, _log
+        io(this_is_private(0), socket(AF_INET, SOCK_STREAM, 0), acceptor_type, false, false, _log
         ) {
     if (fd <= 0) {
         log.error("Fail to create a tcp acceptor,%s!", strerror(errno));

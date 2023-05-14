@@ -36,11 +36,11 @@ public:
 
     //the protected method is only used on event loop thread
     io(const this_is_private &, const int _fd, const io_type,
-       const bool _support_epollrdhup, const logger &_log);
+       const bool _support_epollrdhup, bool nonblock,const logger &_log);
 
     io(const this_is_private &, const int _fd, const io_type type,
-       const bool _support_epollrdhup) : io(this_is_private(0), _fd, type, _support_epollrdhup,
-                                            logger("io" + std::hash<std::string>{}(
+       const bool _support_epollrdhup, bool nonblock) : io(this_is_private(0), _fd, type, _support_epollrdhup,
+                                            nonblock,logger("io" + std::hash<std::string>{}(
                                                            std::to_string(fd +
                                                                           reinterpret_cast<size_t>(this))),
                                                    logger::INFO)) {}

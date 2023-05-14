@@ -90,7 +90,7 @@ bool event_processor::add_io(std::shared_ptr<io> _io) throw() {
     if ((status_local != working && status_local != ready_waiting) || _io == nullptr ||
         !_io->valid_safe() || _io->fd == epfd) {
 
-        log.warn("A file descriptor %d invalid or closed"
+        log.warn("A file descriptor %d invalid or closed "
                  "was tried to add in an epoll instance!", _io->id());
         return false;
     }

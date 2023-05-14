@@ -58,8 +58,8 @@ public:
                     });
 
             //callback mode
-            processor->get_factory().create_io_with_callback<io>(std::move(callback), 1, io::writable, false,
-                                                                processor->get_logger());
+            processor->get_factory().create_io_with_callback<io>(std::move(callback), 1, io::writable, false, false,
+                                                                 processor->get_logger());
 
             return;
         }
@@ -86,7 +86,7 @@ public:
     }
 
 private:
-    event_processor* processor;
+    event_processor *processor;
     logger log;
     std::shared_ptr<io_op> op;
 };
