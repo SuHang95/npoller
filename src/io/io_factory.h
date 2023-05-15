@@ -169,7 +169,7 @@ io_factory::create_io_async(const char *addr, unsigned short int port, _Args &&.
     std::promise<std::shared_ptr<_Tp>> connect_promise;
 
     //this future is for connected_handler use, not return value
-    std::future<std::shared_ptr<_Tp>> connect_future = connect_promise->get_future();
+    std::future<std::shared_ptr<_Tp>> connect_future = connect_promise.get_future();
 
     //we want this future return when connect success, tcp instance initialization and connect call return will not
     //return the future.
@@ -179,9 +179,9 @@ io_factory::create_io_async(const char *addr, unsigned short int port, _Args &&.
             [_promise = std::move(connect_promise)](std::shared_ptr<_Tp> &&ptr,
                                                     const std::string &error_message) mutable {
                 if (ptr != nullptr) {
-                    _promise->set_value(std::move(ptr));
+                    _promise.set_value(std::move(ptr));
                 } else {
-                    _promise->set_exception(
+                    _promise.set_exception(
                             std::make_exception_ptr(std::runtime_error(error_message)));
                 }
             }

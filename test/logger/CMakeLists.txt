@@ -11,6 +11,6 @@ add_executable(log_test_concurrency
 add_executable(baselogger_test
         ${MODULE_SOURCE_DIR}/simple_logger.cpp
         ${MODULE_SOURCE_DIR}/logger.cpp
-        baselogger_test.cpp)
+        baselogger_test.cpp ../timer.h)
 
 target_link_libraries(log_test_concurrency ${CMAKE_THREAD_LIBS_INIT})

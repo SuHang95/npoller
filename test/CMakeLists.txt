@@ -1,4 +1,5 @@
-include_directories(${PROJECT_SOURCE_DIR}/src)
+include_directories(${PROJECT_SOURCE_DIR}/src
+        ${PROJECT_SOURCE_DIR}/test)
 
 set(CMAKE_CXX_STANDARD 20)
 

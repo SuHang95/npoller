@@ -2,14 +2,14 @@
 // Created by suhang on 20-7-25.
 //
 
-#include <sys/socket.h>
-#include <netinet/in.h>
 #include <io/event_processor.h>
 #include <io/io_factory.h>
-#include "connection_pool.h"
+#include <timer.h>
+#include <vector>
+#include <memory>
 
 unsigned short l_port = 9010;
-int nums = 1000;
+int nums = 40000;
 
 class read_op : public io_op {
 public:
@@ -67,8 +67,7 @@ void send_test() {
     std::condition_variable cv;
     bool ready = false;
 
-    std::chrono::microseconds _start = std::chrono::duration_cast<std::chrono::microseconds>(
-            std::chrono::system_clock::now().time_since_epoch());
+    timer _timer("tcp_callback_create_test");
 
     for (size_t i = 0; i < nums; i++) {
         std::atomic_int counter;
@@ -90,18 +89,44 @@ void send_test() {
 
     std::unique_lock<std::mutex> lk(mtx);
     cv.wait(lk, [&] { return ready; });
-    std::chrono::microseconds _end = std::chrono::duration_cast<std::chrono::microseconds>(
-            std::chrono::system_clock::now().time_since_epoch());
     std::cout << "Has created " << nums << " connections!" << std::endl;
-    std::cout << "Time cost for send:" << _end.count() - _start.count() << std::endl;
+
     return;
 }
 
+void send_async_test() {
+    logger _log("send_async_test", logger::WARN, false);
+    event_processor processor(_log);
+    io_factory factory(&processor);
+
+    std::mutex mtx;
+    std::condition_variable cv;
+    bool ready = false;
+    std::vector<std::future<std::shared_ptr<tcp>>> results;
+
+    timer _timer("tcp_callback_create_test");
+
+    for (size_t i = 0; i < nums; i++) {
+        std::atomic_int counter;
+        auto t = factory.create_io_async<tcp>("127.0.0.1", l_port, _log);
+        results.emplace_back(std::move(t));
+    }
+
+    std::atomic_int counter;
+    for (auto &t: results) {
+        try {
+            auto ptr = t.get();
+        } catch (std::exception &e) {
+            _log.debug("Exception happen,create tcp fail! %s", e.what());
+        }
+        counter.fetch_add(1);
+    }
+}
 
 int main() {
-    std::thread t([](){
+    std::thread t([]() {
         accept_test();
     });
-    send_test();
+    send_async_test();
     t.join();
 }
