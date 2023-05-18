@@ -11,7 +11,9 @@ const int default_queue_size = 1000;
 
 class tcp_acceptor :  public io {
 public:
-    tcp_acceptor(const this_is_private &, const logger &_log, unsigned short int port, in_addr_t addr = INADDR_ANY);
+    tcp_acceptor(const this_is_private &, const logger &_log,
+                 const std::function<void(std::shared_ptr<tcp>&&,const std::string&)>&,
+                 unsigned short int port, in_addr_t addr = INADDR_ANY);
 
     bool start_accept(event_processor *processor, int queue_size = default_queue_size);
 
@@ -19,6 +21,7 @@ public:
 
 private:
     sockaddr_in address;
+    const std::function<void(std::shared_ptr<tcp>&&,const std::string&)> callback;
 };
 
 

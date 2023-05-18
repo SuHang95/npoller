@@ -4,6 +4,7 @@
 
 #include <io/event_processor.h>
 #include <io/io_factory.h>
+#include <io/io_awaitable.h>
 #include <timer.h>
 #include <vector>
 #include <memory>
@@ -51,8 +52,14 @@ void accept_test() {
     logger _log("accept_test", logger::WARN, true);
     event_processor processor(_log);
     io_factory factory(&processor);
+    std::function<void(std::shared_ptr<tcp> &&ptr, const std::string &)> callback(
+            [&processor](std::shared_ptr<tcp> &&ptr, const std::string &error_message) {
+                if (ptr != nullptr) {
 
-    auto acceptor_future = factory.create_io_async<tcp_acceptor>(_log, l_port);
+                }
+            });
+
+    auto acceptor_future = factory.create_io_async<tcp_acceptor>(_log, callback, l_port);
     assert(acceptor_future.get() != nullptr);
     sleep(1);
 }

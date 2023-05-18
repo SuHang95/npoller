@@ -6,7 +6,8 @@
 #define IO_H
 
 #include <sulog/logger.h>
-#include "task.h"
+#include <io/task.h>
+#include <io/io_awaitable.h>
 
 #include <sys/epoll.h>
 #include <tbb/concurrent_queue.h>
@@ -80,6 +81,8 @@ public:
 
     //register the event
     virtual bool do_register(const std::shared_ptr<io_op> &);
+
+    io_awaitable<int> read(io_buffer buf,int size);
 
 protected:
     io() {}

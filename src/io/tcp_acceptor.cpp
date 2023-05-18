@@ -8,9 +8,11 @@
 //readable but not writable, don't support epoll_rd_hup
 const static io::io_type acceptor_type = {1, 0};
 
-tcp_acceptor::tcp_acceptor(const io::this_is_private &, const logger &_log, unsigned short int port, in_addr_t addr) :
+tcp_acceptor::tcp_acceptor(const io::this_is_private &, const logger &_log,
+                           const std::function<void(std::shared_ptr<tcp> &&, const std::string &)> &_callback,
+                           unsigned short int port, in_addr_t addr) :
         io(this_is_private(0), socket(AF_INET, SOCK_STREAM, 0), acceptor_type, false, false, _log
-        ) {
+        ), callback(_callback) {
     if (fd <= 0) {
         log.error("Fail to create a tcp acceptor,%s!", strerror(errno));
         io::mark_invalid();
@@ -89,9 +91,12 @@ void tcp_acceptor::direct_read() {
                 case EAGAIN:
                     return;
                 default:
+                    char str[1024];
+                    char *error_str = strerror_r(errno, error_str, 1024);
                     strcpy(ip_str, inet_ntoa(address.sin_addr));
                     log.error("Accept on fd %d fail,%s!local address:%s, port:%d.", fd,
-                              strerror(errno), ip_str, ntohs(address.sin_port));
+                              error_str, ip_str, ntohs(address.sin_port));
+                    callback(nullptr, std::string(error_str));
                     return;
             }
             continue;
@@ -99,7 +104,7 @@ void tcp_acceptor::direct_read() {
         std::shared_ptr<tcp> client_tcp = std::make_shared<tcp>(this_is_private(0), client_fd,
                                                                 tcp::tcp_status::connected,
                                                                 this->log);
-        this->manager.load(std::memory_order_relaxed)->add_io(client_tcp);
+        callback(std::move(client_tcp), std::string{});
         log.debug("Accept a tcp connection:%s", client_tcp->descriptor().c_str());
     } while (need_retry && retry_times++ < 3);
 }
